@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible Chronos Quiz Scroll - The Ultimate Speedrun</title>
+  <!-- Google Fonts for cinematic historical look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Background cinematic parchment overlay -->
+  <div class="parchment-glow"></div>
+
+  <!-- Main Container -->
+  <div id="app-container">
+
+    <!-- Header Section (Always Visible except in Active Quiz / Results) -->
+    <header id="main-header">
+      <div class="header-logo">📜</div>
+      <h1 class="title-primary">Bible Chronos</h1>
+      <p class="title-subtitle">The Sacred Speedrun Scroll</p>
+    </header>
+
+    <!-- State Machine Views -->
+
+    <!-- View 1: Welcome/Auth -->
+    <section id="view-auth" class="view active">
+      <div class="card glassmorphism">
+        <h2 class="card-title">Enter the Gates</h2>
+        <p class="card-description">Provide your credentials and the Session Access ID to unlock the chronos scroll.</p>
+
+        <form id="auth-form" class="auth-form">
+          <div class="form-group">
+            <label for="input-name">Full Name</label>
+            <input type="text" id="input-name" placeholder="E.g., John Doe" required autocomplete="name">
+          </div>
+
+          <div class="form-group">
+            <label for="input-email">Email Address</label>
+            <input type="email" id="input-email" placeholder="E.g., john@example.com" required autocomplete="email">
+          </div>
+
+          <div class="form-group">
+            <label for="input-session-id">Quiz Session Access ID (UUID)</label>
+            <input type="text" id="input-session-id" placeholder="Paste session UUID here" required autocomplete="off">
+          </div>
+
+          <button type="submit" id="btn-join-session" class="btn-primary">Join Session</button>
+        </form>
+
+        <!-- Privacy & Terms Banner -->
+        <footer class="privacy-banner">
+          <p>🛡️ <strong>Scoring Integrity Notice:</strong> By entering, you agree that your name, email, speedrun time, and question response metrics are recorded live. Fullscreen mode and active window focus are strictly monitored to ensure exam fairness.</p>
+        </footer>
+      </div>
+    </section>
+
+    <!-- View 2: Waiting Room -->
+    <section id="view-waiting" class="view">
+      <div class="card glassmorphism text-center">
+        <div class="ticking-clock">
+          <div class="clock-hand"></div>
+        </div>
+        <h2 class="card-title">Sanctuary of Wait</h2>
+        <p class="status-badge waiting">Status: Waiting for Host</p>
+        <p class="card-description text-highlight">The scribe has not yet opened the gates. Please remain here. You will be automatically ushered forward when the quiz begins.</p>
+        
+        <div class="participant-info-summary">
+          <p>Logged in as: <span id="summary-participant-name" class="gold-text"></span></p>
+          <p>Session ID: <span id="summary-session-id" class="dim-text"></span></p>
+        </div>
+
+        <div class="loader-pulse">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 3: The Exam Gate -->
+    <section id="view-gate" class="view">
+      <div class="card glassmorphism text-center gate-card">
+        <h2 class="card-title gold-text">The Gate of Truth</h2>
+        <div class="gate-icon">🔑</div>
+        <p class="card-description warning-text">
+          <strong>WARNING:</strong> Entering the exam triggers strict anti-cheat tracking. Tabbing out, changing windows, or exiting fullscreen will count as security violations. Two violations will cause immediate automatic submission.
+        </p>
+        <p class="card-description">
+          Make sure all distractions are disabled and click below to enter fullscreen and start your speedrun.
+        </p>
+        <button id="btn-enter-fullscreen" class="btn-primary btn-gate">Enter Fullscreen & Start</button>
+      </div>
+    </section>
+
+    <!-- View 4: The Quiz (Active) -->
+    <section id="view-quiz" class="view">
+      <!-- Fixed Speedrun Header -->
+      <div class="quiz-top-bar">
+        <div class="quiz-info-left">
+          <span class="badge-round scroll-badge">Scroll</span>
+          <span class="quiz-title-display" id="quiz-title-text">Loading Quiz...</span>
+        </div>
+        
+        <!-- Speedrun Timer -->
+        <div class="timer-container">
+          <span class="timer-label">TIME</span>
+          <span id="chronos-timer" class="timer-digits">00:00.00</span>
+        </div>
+
+        <div class="quiz-info-right">
+          <span class="progress-label">QUESTION</span>
+          <span id="question-progress-text" class="progress-digits">0/0</span>
+        </div>
+      </div>
+
+      <!-- Main Quiz Card -->
+      <div class="quiz-card-container">
+        <!-- Progress Bar -->
+        <div class="progress-bar-wrapper">
+          <div id="quiz-progress-fill" class="progress-fill"></div>
+        </div>
+
+        <div class="card glassmorphism quiz-card">
+          <div class="question-header">
+            <span class="question-number-badge" id="question-index-badge">Q1</span>
+            <h3 class="question-text" id="question-content-text">Loading question text...</h3>
+          </div>
+
+          <div class="options-container" id="quiz-options-wrapper">
+            <!-- Shuffled options dynamically generated -->
+          </div>
+
+          <div class="quiz-actions">
+            <button id="btn-next-question" class="btn-primary" disabled>Next Question</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 5: Submission Lock -->
+    <section id="view-lock" class="view">
+      <div class="card glassmorphism text-center">
+        <div class="lock-icon">🔒</div>
+        <h2 class="card-title">Exam Locked & Submitted</h2>
+        <p class="card-description">Your answers have been securely recorded in the Supabase Ledger.</p>
+        
+        <div class="spinner-container">
+          <div class="loading-spinner"></div>
+          <p class="spinner-text">Awaiting host to release results...</p>
+        </div>
+
+        <div class="session-results-placeholder">
+          <p>Total Time: <span id="lock-time-taken" class="gold-text">--:--.--</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 6: Leaderboard/Results -->
+    <section id="view-results" class="view">
+      <div class="card glassmorphism results-card">
+        <header class="results-header text-center">
+          <div class="trophy-icon">🏆</div>
+          <h2 class="card-title gold-text">Final Rankings</h2>
+          <p class="card-description">The scribe has closed the session and published the scroll of honor.</p>
+        </header>
+
+        <!-- Personal Results Summary Card -->
+        <div class="personal-score-card">
+          <div class="score-stat">
+            <span class="stat-label">Your Score</span>
+            <span class="stat-value" id="user-final-score">0/0</span>
+          </div>
+          <div class="score-stat">
+            <span class="stat-label">Speedrun Time</span>
+            <span class="stat-value gold-text" id="user-final-time">00:00.00</span>
+          </div>
+          <div class="score-stat">
+            <span class="stat-label">Violations</span>
+            <span class="stat-value" id="user-final-violations">0</span>
+          </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div class="leaderboard-container">
+          <div class="leaderboard-header">
+            <h3>Leaderboard</h3>
+            <button id="btn-refresh-leaderboard" class="btn-secondary">🔄 Refresh</button>
+          </div>
+          <div class="table-responsive">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th class="text-center">Rank</th>
+                  <th>Name</th>
+                  <th class="text-center">Score</th>
+                  <th class="text-center">Speedrun Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-tbody">
+                <!-- Dynamically populated rank list -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="results-actions text-center">
+          <button id="btn-exit-to-menu" class="btn-primary">Return to Gates</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Custom Cheat Alert Modal -->
+  <div id="cheat-modal" class="modal-overlay">
+    <div class="modal-content glassmorphism">
+      <h3 class="modal-title">⚠️ SECURITY VIOLATION</h3>
+      <p class="modal-text">You have exited fullscreen or unfocused the quiz screen.</p>
+      <div class="violation-box">
+        Violation <span id="modal-violation-count">1</span> of 2
+      </div>
+      <p class="modal-warning">
+        Tabbing out to check external Bible references or exiting fullscreen is prohibited. On the second violation, your exam will be automatically submitted immediately.
+      </p>
+      <button id="btn-resume-quiz" class="btn-primary">Return to Exam & Re-Enter Fullscreen</button>
+    </div>
+  </div>
+
+  <!-- Client-side notification alert -->
+  <div id="notification-toast" class="toast">
+    <span id="toast-message">Message text</span>
+  </div>
+
+  <!-- JS Implementation -->
+  <script src="app.js"></script>
+</body>
+</html>
