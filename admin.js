@@ -365,13 +365,13 @@ async function updateSessionStatus(status) {
   }
 }
 
-el.btnStartExam.addEventListener('click', () => {
+el.btnStartExam.addEventListener('click', async () => {
   if (await showCustomConfirm("START the exam? This unlocks the quiz for all waiting participants.")) {
     updateSessionStatus('in_progress');
   }
 });
 
-el.btnEndExam.addEventListener('click', () => {
+el.btnEndExam.addEventListener('click', async () => {
   if (await showCustomConfirm("END the exam? This locks screens and displays the leaderboard.")) {
     updateSessionStatus('completed');
   }
