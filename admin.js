@@ -171,7 +171,7 @@ el.formCreateQuiz.addEventListener('submit', async (e) => {
     el.formCreateQuiz.reset();
     await loadQuizzes();
   } catch (err) {
-    alert("Failed to create quiz: " + err.message);
+    showToast("Failed to create quiz: " + err.message);
   }
 });
 
@@ -212,7 +212,7 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
     el.optA.value = ''; el.optB.value = ''; el.optC.value = ''; el.optD.value = '';
     el.correctAnswer.value = '';
   } catch (err) {
-    alert("Failed to add question: " + err.message);
+    showToast("Failed to add question: " + err.message);
   }
 });
 
@@ -274,7 +274,7 @@ el.formImportCsv.addEventListener('submit', async (e) => {
       showToast(`Imported ${questionsToInsert.length} questions!`);
       el.formImportCsv.reset();
     } catch (err) {
-      alert("CSV Import Error: " + err.message);
+      showToast("CSV Import Error: " + err.message);
     }
   };
   reader.readAsText(file);
@@ -317,7 +317,7 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
     showToast("New Session Generated!");
     syncTelemetrySubscription(accessPin);
   } catch (err) {
-    alert("Failed to generate session: " + err.message);
+    showToast("Failed to generate session: " + err.message);
   }
 });
 
@@ -361,18 +361,18 @@ async function updateSessionStatus(status) {
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'block';
     }
   } catch (err) {
-    alert(`Failed to update status: ` + err.message);
+    showToast(`Failed to update status: ` + err.message);
   }
 }
 
 el.btnStartExam.addEventListener('click', () => {
-  if (confirm("START the exam? This unlocks the quiz for all waiting participants.")) {
+  if (await showCustomConfirm("START the exam? This unlocks the quiz for all waiting participants.")) {
     updateSessionStatus('in_progress');
   }
 });
 
 el.btnEndExam.addEventListener('click', () => {
-  if (confirm("END the exam? This locks screens and displays the leaderboard.")) {
+  if (await showCustomConfirm("END the exam? This locks screens and displays the leaderboard.")) {
     updateSessionStatus('completed');
   }
 });
@@ -444,7 +444,7 @@ el.btnExportCsv.addEventListener('click', async () => {
     document.body.removeChild(link);
 
   } catch (err) {
-    alert("Export failed: " + err.message);
+    showToast("Export failed: " + err.message);
   }
 });
 
@@ -454,7 +454,7 @@ el.btnExportCsv.addEventListener('click', async () => {
 
 // Exposed globally so the onclick in loadQuizzes() can access it
 window.deleteQuiz = async function(quizId, quizTitle) {
-  if (confirm(`CRITICAL WARNING: Are you sure you want to delete "${quizTitle}"? This will cascade and delete all associated questions and sessions.`)) {
+  if (await showCustomConfirm(`CRITICAL WARNING: Are you sure you want to delete "${quizTitle}"? This will cascade and delete all associated questions and sessions.`)) {
     try {
       const { error } = await supabaseClient.from('quizzes').delete().eq('id', quizId);
       if (error) throw error;
@@ -469,7 +469,7 @@ window.deleteQuiz = async function(quizId, quizTitle) {
       
       await loadQuizzes();
     } catch (err) {
-      alert("Failed to delete quiz: " + err.message);
+      showToast("Failed to delete quiz: " + err.message);
     }
   }
 };
@@ -506,7 +506,7 @@ window.backupQuiz = async function(quizId, quizTitle) {
     document.body.removeChild(link);
     showToast(`Backup of "${quizTitle}" downloaded!`);
   } catch (err) {
-    alert("Backup failed: " + err.message);
+    showToast("Backup failed: " + err.message);
   }
 };
 
@@ -550,7 +550,7 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
     el.btnAddQuestionLedger.style.display = 'block';
     
   } catch (err) {
-    alert("Failed to load questions: " + err.message);
+    showToast("Failed to load questions: " + err.message);
   }
 });
 
@@ -580,7 +580,7 @@ window.openQuestionEditor = function(questionData) {
 };
 
 window.deleteQuestion = async function(questionId) {
-  if (!confirm("Are you sure you want to delete this question? This action cannot be undone.")) return;
+  if (!(await showCustomConfirm("Are you sure you want to delete this question? This action cannot be undone."))) return;
   try {
     const { error } = await supabaseClient
       .from('questions')
@@ -590,7 +590,7 @@ window.deleteQuestion = async function(questionId) {
     showToast("Question deleted successfully.");
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
   } catch (err) {
-    alert("Failed to delete question: " + err.message);
+    showToast("Failed to delete question: " + err.message);
   }
 };
 
@@ -608,7 +608,7 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
   const optionsArray = [optA, optB, optC, optD];
   
   if (!optionsArray.includes(correct)) {
-    return alert("The correct answer must exactly match one of the four options.");
+    return showToast("The correct answer must exactly match one of the four options.");
   }
   
   try {
@@ -640,7 +640,7 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
     // Refresh the questions list
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
   } catch(err) {
-    alert("Failed to save question: " + err.message);
+    showToast("Failed to save question: " + err.message);
   }
 });
 

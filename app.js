@@ -884,8 +884,8 @@ el.btnPrevQuestion.addEventListener("click", () => {
   }
 });
 
-el.btnSubmitScroll.addEventListener("click", () => {
-  if (confirm("Are you sure you want to submit the exam?")) {
+el.btnSubmitScroll.addEventListener("click", async () => {
+  if (await showCustomConfirm("Are you sure you want to submit the exam?")) {
     submitQuiz(false);
   }
 });
@@ -893,8 +893,8 @@ el.btnSubmitScroll.addEventListener("click", () => {
 // Also attach event to the sticky footer submit button if it exists separately, but we can reuse btnSubmitScroll. 
 // Assuming btn-submit-scroll is moved to the sticky footer in HTML.
 
-el.btnSubmitMap.addEventListener("click", () => {
-  if (confirm("Are you sure you want to submit the exam?")) {
+el.btnSubmitMap.addEventListener("click", async () => {
+  if (await showCustomConfirm("Are you sure you want to submit the exam?")) {
     submitQuiz(false);
   }
 });
