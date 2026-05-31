@@ -252,11 +252,11 @@
         <button type="submit" class="btn-primary btn-block">Generate New Session</button>
       </form>
 
-      <!-- Generated UUID Display -->
-      <div id="session-uuid-container" style="display: none; margin-top: 2rem;">
-        <p style="color: var(--color-text-secondary); font-size: 0.9rem; text-align: center;">Share this UUID with your participants:</p>
-        <div id="display-uuid" class="uuid-display-box"></div>
-        <button id="btn-copy-uuid" class="btn-secondary btn-block">Copy UUID to Clipboard</button>
+      <!-- Generated PIN Display -->
+      <div id="session-pin-container" style="display: none; margin-top: 2rem;">
+        <p style="color: var(--color-text-secondary); font-size: 0.9rem; text-align: center;">Share this 6-Digit PIN with your participants:</p>
+        <div id="display-pin" class="uuid-display-box" style="font-size: 2rem; letter-spacing: 0.5rem;"></div>
+        <button id="btn-copy-pin" class="btn-secondary btn-block">Copy PIN to Clipboard</button>
       </div>
     </section>
 
@@ -267,13 +267,65 @@
       <p class="card-description text-center">Control the flow of time for the active session.</p>
 
       <div class="form-group" style="text-align: left;">
-        <label for="live-session-uuid">Active Session UUID</label>
-        <input type="text" id="live-session-uuid" placeholder="Paste session UUID to control..." required>
+        <label for="live-session-pin">Active Session 6-Digit PIN</label>
+        <input type="text" id="live-session-pin" placeholder="E.g., 123456" pattern="\d{6}" maxlength="6" required style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem; font-family: monospace;">
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
         <button id="btn-start-exam" class="btn-primary btn-start btn-block">▶ START EXAM</button>
         <button id="btn-end-exam" class="btn-primary btn-end btn-block">⏹ END EXAM & PUBLISH RESULTS</button>
+      </div>
+    </section>
+
+    <!-- PANEL 4: Ledger Management -->
+    <section class="card glassmorphism admin-panel">
+      <div class="panel-icon">📚</div>
+      <h2 class="card-title">Ledger Management</h2>
+      <p class="card-description">Delete quizzes or edit existing questions.</p>
+
+      <div style="margin-bottom: 2rem;">
+        <h3 style="color: var(--color-gold); font-size: 1.1rem; border-bottom: 1px solid var(--border-gold); padding-bottom: 0.5rem; margin-bottom: 1rem;">Delete Quizzes</h3>
+        <div id="ledger-quiz-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div>
+        <h3 style="color: var(--color-gold); font-size: 1.1rem; margin-bottom: 1rem;">Edit Questions</h3>
+        <div class="form-group">
+          <label>Select Quiz to Edit</label>
+          <select id="ledger-select-quiz">
+            <option value="" disabled selected>Loading quizzes...</option>
+          </select>
+        </div>
+        <div id="ledger-questions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+          <!-- Populated by JS -->
+        </div>
+        
+        <!-- Hidden Edit Question Form -->
+        <div id="edit-question-container" style="display: none; background: rgba(0,0,0,0.4); padding: 1rem; border: 1px dashed var(--color-gold); border-radius: 6px;">
+          <h4 style="color: var(--color-gold-bright); margin-bottom: 1rem; margin-top: 0;">Edit Selected Question</h4>
+          <form id="form-edit-question">
+            <input type="hidden" id="edit-q-id">
+            <div class="form-group">
+              <label>Question Text</label>
+              <textarea id="edit-q-text" required></textarea>
+            </div>
+            <div class="options-grid">
+              <div class="form-group"><input type="text" id="edit-opt-a" required></div>
+              <div class="form-group"><input type="text" id="edit-opt-b" required></div>
+              <div class="form-group"><input type="text" id="edit-opt-c" required></div>
+              <div class="form-group"><input type="text" id="edit-opt-d" required></div>
+            </div>
+            <div class="form-group">
+              <label>Correct Answer (Exact Match)</label>
+              <input type="text" id="edit-q-correct" required>
+            </div>
+            <button type="submit" class="btn-primary btn-block" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);">Save Changes</button>
+          </form>
+        </div>
       </div>
     </section>
 

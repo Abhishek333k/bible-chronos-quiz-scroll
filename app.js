@@ -78,7 +78,7 @@ const el = {
   authForm: document.getElementById("auth-form"),
   inputName: document.getElementById("input-name"),
   inputEmail: document.getElementById("input-email"),
-  inputSessionId: document.getElementById("input-session-id"),
+  inputSessionPin: document.getElementById("input-session-pin"),
 
   // Waiting View
   summaryName: document.getElementById("summary-participant-name"),
@@ -190,11 +190,12 @@ function showToast(message) {
   }, 4000);
 }
 
-// Check if string is a valid UUID
-function isValidUUID(str) {
-  const regexExp = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/gi;
+// Check if string is a valid 6-digit PIN
+function isValidPIN(str) {
+  const regexExp = /^\d{6}$/;
   return regexExp.test(str);
 }
+
 
 // ----------------------------------------------------
 // 6. View 1: Join Session & Auth Gate
@@ -209,10 +210,10 @@ el.authForm.addEventListener("submit", async (e) => {
 
   const name = el.inputName.value.trim();
   const email = el.inputEmail.value.trim();
-  const rawSessionId = el.inputSessionId.value.trim();
+  const rawSessionPin = el.inputSessionPin.value.trim();
 
-  if (!isValidUUID(rawSessionId)) {
-    showToast("Please enter a valid Quiz Session ID (UUID).");
+  if (!isValidPIN(rawSessionPin)) {
+    showToast("Please enter a valid 6-Digit Access PIN.");
     return;
   }
 
@@ -222,11 +223,11 @@ el.authForm.addEventListener("submit", async (e) => {
   submitBtn.textContent = "Connecting...";
 
   try {
-    // 1. Fetch the Session details from database
+    // 1. Fetch the Session details from database using the access PIN
     const { data: session, error: sessionError } = await supabaseClient
       .from("quiz_sessions")
       .select("*")
-      .eq("id", rawSessionId)
+      .eq("access_pin", rawSessionPin)
       .single();
 
     if (sessionError || !session) {
@@ -246,7 +247,7 @@ el.authForm.addEventListener("submit", async (e) => {
     // Store details in state
     state.name = name;
     state.email = email;
-    state.sessionId = rawSessionId;
+    state.sessionId = session.id; // Store the actual UUID for backend operations
     state.quizId = session.quiz_id;
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
 
