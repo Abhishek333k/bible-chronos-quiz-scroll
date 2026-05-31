@@ -904,3 +904,34 @@ if (document.readyState === "loading") {
 } else {
   initializeAdminUI();
 }
+
+// ----------------------------------------------------
+// Custom Premium Dialogs
+// ----------------------------------------------------
+function showCustomConfirm(message) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('custom-confirm-modal');
+    if (!modal) {
+        console.error("custom-confirm-modal element missing from DOM");
+        return resolve(false);
+    }
+    const msgEl = document.getElementById('custom-confirm-msg');
+    const btnYes = document.getElementById('custom-confirm-yes');
+    const btnNo = document.getElementById('custom-confirm-no');
+    
+    msgEl.textContent = message;
+    modal.classList.add('active');
+    
+    const cleanup = () => {
+      btnYes.removeEventListener('click', onYes);
+      btnNo.removeEventListener('click', onNo);
+      modal.classList.remove('active');
+    };
+    
+    const onYes = () => { cleanup(); resolve(true); };
+    const onNo = () => { cleanup(); resolve(false); };
+    
+    btnYes.addEventListener('click', onYes);
+    btnNo.addEventListener('click', onNo);
+  });
+}
