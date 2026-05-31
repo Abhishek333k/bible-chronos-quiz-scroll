@@ -41,15 +41,66 @@
       z-index: 1000;
     }
 
-    /* Dashboard Grid Layout */
+    /* Dashboard Layout Adjustments */
     .dashboard-container {
       max-width: 1400px;
-      margin: 3rem auto;
+      margin: 1rem auto 3rem auto;
       padding: 0 2rem;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-      gap: 2.5rem;
-      align-items: flex-start;
+    }
+
+    /* Tab Navigation */
+    .admin-tabs {
+      display: flex;
+      gap: 1rem;
+      margin: 2rem auto;
+      max-width: 1000px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 0 1rem;
+    }
+    
+    .tab-btn {
+      background: rgba(15, 15, 20, 0.85);
+      border: 1px solid var(--border-gold);
+      color: var(--color-text-primary);
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+      flex: 1;
+      min-width: 200px;
+    }
+    
+    .tab-btn:hover {
+      background: rgba(193, 154, 107, 0.1);
+      box-shadow: 0 4px 15px rgba(193, 154, 107, 0.15);
+    }
+    
+    .tab-btn.active {
+      background: rgba(193, 154, 107, 0.15);
+      border-color: var(--color-gold-bright);
+      box-shadow: 0 0 20px var(--color-gold-glow);
+      color: var(--color-gold-bright);
+    }
+    
+    /* Tab Content Containers */
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.4s ease-in-out;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* Panel Adjustments */
@@ -170,10 +221,19 @@
     ⚠️ ADMINISTRATIVE COMMAND CENTER: Do not share this URL with participants. ⚠️
   </div>
 
+  <!-- Tab Navigation -->
+  <nav class="admin-tabs" id="admin-tabs">
+    <button class="tab-btn active" data-target="tab-scriptorium">✍️ The Scriptorium</button>
+    <button class="tab-btn" data-target="tab-deploy">🏛️ Deploy Session</button>
+    <button class="tab-btn" data-target="tab-live">⚙️ Live Operations</button>
+    <button class="tab-btn" data-target="tab-ledger">📚 Ledger</button>
+  </nav>
+
   <div class="dashboard-container">
     
     <!-- PANEL 1: The Scriptorium (Quiz Manager) -->
-    <section class="card glassmorphism admin-panel">
+    <div id="tab-scriptorium" class="tab-content active">
+      <section class="card glassmorphism admin-panel">
       <div class="panel-icon">✍️</div>
       <h2 class="card-title">The Scriptorium</h2>
       <p class="card-description">Create and manage your scrolls (quizzes).</p>
@@ -233,10 +293,32 @@
 
         <button type="submit" class="btn-primary btn-block">Commit Question</button>
       </form>
-    </section>
+
+      <hr class="divider">
+
+      <!-- Bulk Import Questions (CSV) -->
+      <h3 class="card-title" style="font-size: 1.2rem; color: var(--color-gold);">Bulk Import Questions (CSV)</h3>
+      <form id="form-import-csv">
+        <div class="form-group">
+          <label for="select-quiz-import">Select Quiz</label>
+          <select id="select-quiz-import" required>
+            <option value="" disabled selected>Loading quizzes...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="file-import-csv">Upload CSV File</label>
+          <input type="file" id="file-import-csv" accept=".csv" required style="padding: 0.5rem; cursor: pointer; color: white;">
+          <small style="color: var(--color-text-secondary); display: block; margin-top: 0.5rem;">Headers: Question Text, Option A, Option B, Option C, Option D, Correct Option</small>
+        </div>
+        <button type="submit" class="btn-primary btn-block" style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);">Upload & Import</button>
+      </form>
+
+      </section>
+    </div>
 
     <!-- PANEL 2: Session Generator (The Gates) -->
-    <section class="card glassmorphism admin-panel">
+    <div id="tab-deploy" class="tab-content">
+      <section class="card glassmorphism admin-panel">
       <div class="panel-icon">🏛️</div>
       <h2 class="card-title">Session Generator</h2>
       <p class="card-description">Open the gates for a new group of participants.</p>
@@ -246,6 +328,18 @@
           <label for="select-quiz-session">Select Quiz</label>
           <select id="select-quiz-session" required>
             <option value="" disabled selected>Loading quizzes...</option>
+          </select>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+          <input type="checkbox" id="session-is-jumbled" checked style="width: auto; margin: 0; cursor: pointer;">
+          <label for="session-is-jumbled" style="margin: 0; cursor: pointer;">Jumble Questions & Options</label>
+        </div>
+
+        <div class="form-group">
+          <label for="session-display-mode">Display Mode</label>
+          <select id="session-display-mode" required>
+            <option value="paged">One-by-One (TCS Style)</option>
+            <option value="scroll">All-at-Once (Physical Exam Style)</option>
           </select>
         </div>
         
@@ -258,10 +352,12 @@
         <div id="display-pin" class="uuid-display-box" style="font-size: 2rem; letter-spacing: 0.5rem;"></div>
         <button id="btn-copy-pin" class="btn-secondary btn-block">Copy PIN to Clipboard</button>
       </div>
-    </section>
+      </section>
+    </div>
 
     <!-- PANEL 3: Live Operations (The Switch) -->
-    <section class="card glassmorphism admin-panel switch-panel">
+    <div id="tab-live" class="tab-content">
+      <section class="card glassmorphism admin-panel switch-panel">
       <div class="panel-icon">⚙️</div>
       <h2 class="card-title text-center">Live Operations</h2>
       <p class="card-description text-center">Control the flow of time for the active session.</p>
@@ -276,16 +372,18 @@
         <button id="btn-end-exam" class="btn-primary btn-end btn-block">⏹ END EXAM & PUBLISH RESULTS</button>
         <button id="btn-export-csv" class="btn-secondary btn-block" style="display: none; border-color: var(--color-gold); color: var(--color-gold);">⬇️ Download Scroll (CSV)</button>
       </div>
-    </section>
+      </section>
+    </div>
 
     <!-- PANEL 4: Ledger Management -->
-    <section class="card glassmorphism admin-panel">
+    <div id="tab-ledger" class="tab-content">
+      <section class="card glassmorphism admin-panel">
       <div class="panel-icon">📚</div>
       <h2 class="card-title">Ledger Management</h2>
       <p class="card-description">Delete quizzes or edit existing questions.</p>
 
       <div style="margin-bottom: 2rem;">
-        <h3 style="color: var(--color-gold); font-size: 1.1rem; border-bottom: 1px solid var(--border-gold); padding-bottom: 0.5rem; margin-bottom: 1rem;">Delete Quizzes</h3>
+        <h3 style="color: var(--color-gold); font-size: 1.1rem; border-bottom: 1px solid var(--border-gold); padding-bottom: 0.5rem; margin-bottom: 1rem;">Manage & Backup Quizzes</h3>
         <div id="ledger-quiz-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
           <!-- Populated by JS -->
         </div>
@@ -304,10 +402,11 @@
         <div id="ledger-questions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
           <!-- Populated by JS -->
         </div>
-        
+        <button id="btn-add-new-question-ledger" class="btn-secondary btn-block" style="display: none; margin-bottom: 1.5rem; border: 1px dashed var(--color-gold); color: var(--color-gold);">➕ Add New Question to this Quiz</button>
+
         <!-- Hidden Edit Question Form -->
         <div id="edit-question-container" style="display: none; background: rgba(0,0,0,0.4); padding: 1rem; border: 1px dashed var(--color-gold); border-radius: 6px;">
-          <h4 style="color: var(--color-gold-bright); margin-bottom: 1rem; margin-top: 0;">Edit Selected Question</h4>
+          <h4 id="edit-question-title" style="color: var(--color-gold-bright); margin-bottom: 1rem; margin-top: 0;">Edit Selected Question</h4>
           <form id="form-edit-question">
             <input type="hidden" id="edit-q-id">
             <div class="form-group">
@@ -328,7 +427,8 @@
           </form>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
 
   </div>
 

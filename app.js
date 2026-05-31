@@ -59,7 +59,11 @@ let state = {
 
   // Navigation / Views State
   currentView: "view-auth",
-  realtimeChannel: null
+  realtimeChannel: null,
+  
+  // Settings
+  isJumbled: true,
+  displayMode: 'paged'
 };
 
 // ----------------------------------------------------
@@ -69,10 +73,15 @@ const el = {
   // Views
   viewAuth: document.getElementById("view-auth"),
   viewWaiting: document.getElementById("view-waiting"),
-  viewGate: document.getElementById("view-gate"),
+  viewGate: document.getElementById("view-gate"), // Keeping reference so showView doesn't break if passed, but it's removed from DOM
   viewQuiz: document.getElementById("view-quiz"),
   viewLock: document.getElementById("view-lock"),
   viewResults: document.getElementById("view-results"),
+  viewBooklet: document.getElementById("view-booklet"),
+
+  // Waiting Room specific
+  waitingLoaderContainer: document.getElementById("waiting-loader-container"),
+  gateContainer: document.getElementById("gate-container"),
 
   // Auth View
   authForm: document.getElementById("auth-form"),
@@ -95,7 +104,18 @@ const el = {
   questionIndexBadge: document.getElementById("question-index-badge"),
   questionContent: document.getElementById("question-content-text"),
   optionsWrapper: document.getElementById("quiz-options-wrapper"),
+  btnPrevQuestion: document.getElementById("btn-prev-question"),
   btnNextQuestion: document.getElementById("btn-next-question"),
+  btnSubmitScroll: document.getElementById("btn-submit-scroll"),
+  quizRightColumn: document.getElementById("quiz-right-column"),
+  questionMapGrid: document.getElementById("question-map-grid"),
+  btnSubmitMap: document.getElementById("btn-submit-map"),
+  quizContentArea: document.getElementById("quiz-content-area"),
+  quizFooterActions: document.getElementById("quiz-footer-actions"),
+  
+  // Sticky Footer
+  scrollStickyFooter: document.getElementById("scroll-sticky-footer"),
+  footerCounter: document.getElementById("footer-counter"),
 
   // Lock View
   lockTimeTaken: document.getElementById("lock-time-taken"),
@@ -104,9 +124,14 @@ const el = {
   userFinalScore: document.getElementById("user-final-score"),
   userFinalTime: document.getElementById("user-final-time"),
   userFinalViolations: document.getElementById("user-final-violations"),
+  btnReviewAnswers: document.getElementById("btn-review-answers"),
   leaderboardTbody: document.getElementById("leaderboard-tbody"),
   btnRefreshLeaderboard: document.getElementById("btn-refresh-leaderboard"),
   btnExitToMenu: document.getElementById("btn-exit-to-menu"),
+
+  // Booklet View
+  bookletContent: document.getElementById("booklet-content"),
+  btnBackLeaderboard: document.getElementById("btn-back-leaderboard"),
 
   // Custom Cheat Modal
   cheatModal: document.getElementById("cheat-modal"),
@@ -128,14 +153,14 @@ function showView(viewId) {
   const views = [
     el.viewAuth,
     el.viewWaiting,
-    el.viewGate,
     el.viewQuiz,
     el.viewLock,
-    el.viewResults
+    el.viewResults,
+    el.viewBooklet
   ];
   
   views.forEach(v => {
-    v.classList.remove("active");
+    if (v) v.classList.remove("active");
   });
 
   // Show active view
@@ -151,6 +176,62 @@ function showView(viewId) {
   } else {
     header.style.display = "block";
   }
+}
+
+// ----------------------------------------------------
+// 15. The Booklet View (Evaluated Scroll)
+// ----------------------------------------------------
+el.btnReviewAnswers.addEventListener('click', () => {
+  renderBooklet();
+  showView("view-booklet");
+});
+
+el.btnBackLeaderboard.addEventListener('click', () => {
+  showView("view-results");
+});
+
+function renderBooklet() {
+  el.bookletContent.innerHTML = '';
+  
+  if (!state.questions || state.questions.length === 0) return;
+  
+  state.questions.forEach((q, idx) => {
+    const userChoice = state.userAnswers[q.id] || "No Answer Selected";
+    const correctChoice = q.correct_option;
+    const isCorrect = userChoice === correctChoice;
+    
+    const block = document.createElement('div');
+    block.className = 'booklet-question';
+    
+    let answerHtml = '';
+    
+    if (isCorrect) {
+      answerHtml = `
+        <div class="booklet-answer-box booklet-correct">
+          <div class="answer-label">✅ Correct</div>
+          <div>${userChoice}</div>
+        </div>
+      `;
+    } else {
+      answerHtml = `
+        <div class="booklet-answer-box booklet-incorrect">
+          <div class="answer-label">❌ Incorrect</div>
+          <div><del>${userChoice}</del></div>
+        </div>
+        <div class="booklet-actual-correct">
+          <span>Actual Correct Answer:</span><br>
+          ${correctChoice}
+        </div>
+      `;
+    }
+    
+    block.innerHTML = `
+      <h4>Q${idx + 1}. ${q.question_text}</h4>
+      ${answerHtml}
+    `;
+    
+    el.bookletContent.appendChild(block);
+  });
 }
 
 // ----------------------------------------------------
@@ -258,6 +339,8 @@ el.authForm.addEventListener("submit", async (e) => {
     state.sessionId = session.id; // Store the actual UUID for backend operations
     state.quizId = session.quiz_id;
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
+    state.isJumbled = session.is_jumbled === false ? false : true;
+    state.displayMode = session.display_mode || 'paged';
 
     // Setup UI summary
     el.summaryName.textContent = name;
@@ -308,10 +391,21 @@ function subscribeToSession() {
 function evaluateSessionStatus(status) {
   if (status === 'waiting') {
     showView("view-waiting");
+    el.waitingLoaderContainer.style.display = 'block';
+    el.gateContainer.style.display = 'none';
   } else if (status === 'in_progress') {
     // Only transition if we haven't already completed/locked or started
     if (state.currentView === 'view-auth' || state.currentView === 'view-waiting') {
-      showView("view-gate");
+      showView("view-waiting");
+      el.waitingLoaderContainer.style.display = 'none';
+      el.gateContainer.style.display = 'block';
+      
+      // Play a gentle professional chime sound
+      const chimeUrl = "data:audio/wav;base64,UklGRmYBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUMBAACAgICAgICAf3p2cW1pZmJgXVtYV1RTUVBOTUxLSUhGRURCQUA/Pjw7OTg3NTQzMjEwLy4tLCsqKSgnJiUkIyIhIB8eHRwbGhkYFxYVFBMSERAPDgwLCgkIBwYFBQQDAgEAAICAgICAgIB/enZxbWlmYmBdW1hXVFNQUE5NTEtJSEZFREJBQD8+PDs5ODc1NDMyMTAvLi0sKyopKCcms";
+      try {
+        const audio = new Audio(chimeUrl);
+        audio.play().catch(e => console.warn("Audio playback prevented:", e));
+      } catch(e) {}
     }
   } else if (status === 'completed') {
     // If the exam status changes to completed, pull the final leaderboard
@@ -369,8 +463,8 @@ async function loadAndInitializeQuiz() {
       return;
     }
 
-    // Shuffle questions with Fisher-Yates
-    state.questions = fisherYatesShuffle(questions);
+    // Shuffle questions with Fisher-Yates if jumbled
+    state.questions = state.isJumbled ? fisherYatesShuffle(questions) : questions;
     state.currentQuestionIndex = 0;
     state.userAnswers = {};
     state.violationCount = 0;
@@ -382,8 +476,8 @@ async function loadAndInitializeQuiz() {
     // Initialize & Start Speedrun Timer
     startTimer();
 
-    // Render first question
-    renderQuestion();
+    // Render first question layout
+    initializeQuizUI();
 
   } catch (err) {
     console.error("Quiz initialization error:", err);
@@ -391,84 +485,185 @@ async function loadAndInitializeQuiz() {
   }
 }
 
-function renderQuestion() {
-  const currentQuestion = state.questions[state.currentQuestionIndex];
-  
-  // Progress calculations
-  const totalQuestions = state.questions.length;
-  const progressTextVal = `${state.currentQuestionIndex + 1}/${totalQuestions}`;
-  el.progressText.textContent = progressTextVal;
-  
-  const percentage = ((state.currentQuestionIndex + 1) / totalQuestions) * 100;
-  el.progressBarFill.style.width = `${percentage}%`;
-
-  // Question Info
-  el.questionIndexBadge.textContent = `Q${state.currentQuestionIndex + 1}`;
-  el.questionContent.textContent = currentQuestion.question_text;
-
-  // Clear options and render Fisher-Yates shuffled options
-  el.optionsWrapper.innerHTML = "";
-  el.btnNextQuestion.disabled = true;
-
-  // Parse options array
-  let originalOptions = [];
-  if (Array.isArray(currentQuestion.options)) {
-    originalOptions = currentQuestion.options;
-  } else if (typeof currentQuestion.options === 'string') {
-    try {
-      originalOptions = JSON.parse(currentQuestion.options);
-    } catch {
-      originalOptions = [];
+function updateFooterCounter() {
+  if (state.displayMode === 'scroll') {
+    const answeredCount = Object.keys(state.userAnswers).length;
+    const totalCount = state.questions.length;
+    if (el.footerCounter) {
+      el.footerCounter.textContent = `Answered: ${answeredCount} / ${totalCount}`;
     }
   }
+}
 
-  // Shuffle options to prevent position-based cheating
-  const shuffledOptions = fisherYatesShuffle(originalOptions);
+function saveDisasterRecovery() {
+  sessionStorage.setItem("inProgressQuiz", JSON.stringify({
+    userAnswers: state.userAnswers,
+    currentQuestionIndex: state.currentQuestionIndex,
+    guestId: state.guestId,
+    sessionId: state.sessionId,
+    quizId: state.quizId,
+    name: state.name,
+    email: state.email,
+    questions: state.questions,
+    isJumbled: state.isJumbled,
+    displayMode: state.displayMode
+  }));
+}
 
-  shuffledOptions.forEach((optText, index) => {
-    const letter = String.fromCharCode(65 + index); // A, B, C, D...
+function initializeQuizUI() {
+  if (state.displayMode === 'scroll') {
+    el.quizRightColumn.style.display = 'none';
+    el.quizFooterActions.style.display = 'none';
+    el.quizContentArea.innerHTML = '';
+    
+    state.questions.forEach((q, index) => {
+      const qBlock = document.createElement('div');
+      qBlock.className = 'scroll-question-block card glassmorphism paged-card';
+      qBlock.innerHTML = `
+        <div class="question-header">
+          <span class="question-number-badge">Q${index + 1}</span>
+          <h3 class="question-text">${q.question_text}</h3>
+        </div>
+        <div class="options-container" id="scroll-opts-${q.id}"></div>
+      `;
+      el.quizContentArea.appendChild(qBlock);
+      
+      const optContainer = document.getElementById(`scroll-opts-${q.id}`);
+      let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+      // Use pre-shuffled options if they exist
+      if (!q._shuffledOpts) {
+        q._shuffledOpts = state.isJumbled ? fisherYatesShuffle([...originalOptions]) : [...originalOptions];
+      }
+      
+      q._shuffledOpts.forEach((optText, optIdx) => {
+        const letter = String.fromCharCode(65 + optIdx);
+        const btn = document.createElement('button');
+        btn.className = "option-btn";
+        btn.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
+        btn.querySelector(".option-text-content").textContent = optText;
+        
+        if (state.userAnswers[q.id] === optText) {
+          btn.classList.add("selected");
+        }
+        
+        btn.addEventListener('click', () => {
+          optContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          state.userAnswers[q.id] = optText;
+          saveDisasterRecovery();
+          updateFooterCounter();
+        });
+        optContainer.appendChild(btn);
+      });
+    });
+    
+    // Hide inline submit button, show sticky footer
+    if (el.btnSubmitScroll) el.btnSubmitScroll.style.display = 'none';
+    if (el.scrollStickyFooter) el.scrollStickyFooter.style.display = 'flex';
+    
+    updateFooterCounter();
+    
+    el.progressText.textContent = `ALL`;
+    el.progressBarFill.style.width = `100%`;
+    
+  } else {
+    // Paged Mode
+    el.quizRightColumn.style.display = 'block';
+    el.quizFooterActions.style.display = 'flex';
+    if (el.btnSubmitScroll) el.btnSubmitScroll.style.display = 'none';
+    if (el.scrollStickyFooter) el.scrollStickyFooter.style.display = 'none';
+    
+    el.quizContentArea.innerHTML = `
+      <div class="card glassmorphism quiz-card paged-card">
+        <div class="question-header">
+          <span class="question-number-badge" id="question-index-badge"></span>
+          <h3 class="question-text" id="question-content-text"></h3>
+        </div>
+        <div class="options-container" id="quiz-options-wrapper"></div>
+      </div>
+    `;
+    
+    el.questionIndexBadge = document.getElementById("question-index-badge");
+    el.questionContent = document.getElementById("question-content-text");
+    el.optionsWrapper = document.getElementById("quiz-options-wrapper");
+    
+    renderQuestionPaged();
+  }
+}
+
+function updateQuestionMap() {
+  el.questionMapGrid.innerHTML = '';
+  state.questions.forEach((q, idx) => {
+    const mapBtn = document.createElement('button');
+    mapBtn.className = 'map-btn';
+    mapBtn.textContent = idx + 1;
+    if (state.userAnswers[q.id]) mapBtn.classList.add('answered');
+    if (idx === state.currentQuestionIndex) mapBtn.classList.add('current');
+    
+    mapBtn.addEventListener('click', () => {
+      state.currentQuestionIndex = idx;
+      renderQuestionPaged();
+    });
+    el.questionMapGrid.appendChild(mapBtn);
+  });
+}
+
+function renderQuestionPaged() {
+  const currentQuestion = state.questions[state.currentQuestionIndex];
+  const totalQuestions = state.questions.length;
+  
+  el.progressText.textContent = `${state.currentQuestionIndex + 1}/${totalQuestions}`;
+  el.progressBarFill.style.width = `${((state.currentQuestionIndex + 1) / totalQuestions) * 100}%`;
+  
+  el.questionIndexBadge.textContent = `Q${state.currentQuestionIndex + 1}`;
+  el.questionContent.textContent = currentQuestion.question_text;
+  
+  el.optionsWrapper.innerHTML = "";
+  
+  // Navigation Buttons State
+  el.btnPrevQuestion.style.display = state.currentQuestionIndex > 0 ? 'inline-block' : 'none';
+  if (state.currentQuestionIndex === totalQuestions - 1) {
+    el.btnNextQuestion.textContent = "Submit Exam";
+    // Allow clicking submit even if not answered in this mode, or keep logic same
+    el.btnNextQuestion.disabled = false;
+  } else {
+    el.btnNextQuestion.textContent = "Next Question";
+    el.btnNextQuestion.disabled = false; // Always allow navigation in paged mode
+  }
+  
+  updateQuestionMap();
+  
+  let originalOptions = Array.isArray(currentQuestion.options) ? currentQuestion.options : JSON.parse(currentQuestion.options || "[]");
+  
+  // If we want consistency, we should pre-shuffle options and store them, or re-seed.
+  // For simplicity, we just use the original options array or shuffle it on every render,
+  // but shuffling on every render changes the order.
+  // Better to attach shuffled options to the question object during initialization!
+  if (!currentQuestion._shuffledOpts) {
+    currentQuestion._shuffledOpts = state.isJumbled ? fisherYatesShuffle([...originalOptions]) : [...originalOptions];
+  }
+  
+  currentQuestion._shuffledOpts.forEach((optText, index) => {
+    const letter = String.fromCharCode(65 + index);
     const button = document.createElement("button");
     button.className = "option-btn";
     button.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
-    
-    // Safely write text content to avoid XSS
     button.querySelector(".option-text-content").textContent = optText;
-
-    button.addEventListener("click", () => {
-      // Manage selected state
-      document.querySelectorAll(".option-btn").forEach(btn => {
-        btn.classList.remove("selected");
-      });
+    
+    if (state.userAnswers[currentQuestion.id] === optText) {
       button.classList.add("selected");
-      
-      // Store selection
+    }
+    
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".option-btn").forEach(btn => btn.classList.remove("selected"));
+      button.classList.add("selected");
       state.userAnswers[currentQuestion.id] = optText;
-      
-      // Disaster Recovery Auto-Save
-      sessionStorage.setItem("inProgressQuiz", JSON.stringify({
-        userAnswers: state.userAnswers,
-        currentQuestionIndex: state.currentQuestionIndex,
-        guestId: state.guestId,
-        sessionId: state.sessionId,
-        quizId: state.quizId,
-        name: state.name,
-        email: state.email,
-        questions: state.questions
-      }));
-      
-      // Enable next button
-      el.btnNextQuestion.disabled = false;
+      saveDisasterRecovery();
+      updateQuestionMap(); // Update grid style
     });
-
+    
     el.optionsWrapper.appendChild(button);
   });
-
-  // Manage Next/Submit Button Text
-  if (state.currentQuestionIndex === totalQuestions - 1) {
-    el.btnNextQuestion.textContent = "Submit Exam";
-  } else {
-    el.btnNextQuestion.textContent = "Next Question";
-  }
 }
 
 // Next/Submit Button Click Listener
@@ -476,9 +671,31 @@ el.btnNextQuestion.addEventListener("click", () => {
   const totalQuestions = state.questions.length;
   if (state.currentQuestionIndex < totalQuestions - 1) {
     state.currentQuestionIndex++;
-    renderQuestion();
+    renderQuestionPaged();
   } else {
     // Submit Quiz normally
+    submitQuiz(false);
+  }
+});
+
+el.btnPrevQuestion.addEventListener("click", () => {
+  if (state.currentQuestionIndex > 0) {
+    state.currentQuestionIndex--;
+    renderQuestionPaged();
+  }
+});
+
+el.btnSubmitScroll.addEventListener("click", () => {
+  if (confirm("Are you sure you want to submit the exam?")) {
+    submitQuiz(false);
+  }
+});
+
+// Also attach event to the sticky footer submit button if it exists separately, but we can reuse btnSubmitScroll. 
+// Assuming btn-submit-scroll is moved to the sticky footer in HTML.
+
+el.btnSubmitMap.addEventListener("click", () => {
+  if (confirm("Are you sure you want to submit the exam?")) {
     submitQuiz(false);
   }
 });
@@ -807,6 +1024,8 @@ document.addEventListener("DOMContentLoaded", () => {
       state.name = saved.name;
       state.email = saved.email;
       state.questions = saved.questions;
+      state.isJumbled = saved.isJumbled !== undefined ? saved.isJumbled : true;
+      state.displayMode = saved.displayMode || 'paged';
       
       // Update UI summary
       el.summaryName.textContent = state.name;
@@ -816,7 +1035,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Restore to quiz view immediately
       showView("view-quiz");
-      renderQuestion();
+      initializeQuizUI();
       startTimer(); // Restart clock (note: total time will be a bit off, but it's okay for disaster recovery)
       
       // Trigger anti-cheat for reloading

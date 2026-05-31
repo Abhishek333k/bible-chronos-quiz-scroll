@@ -62,41 +62,40 @@
       </div>
     </section>
 
-    <!-- View 2: Waiting Room -->
+    <!-- View 2: Waiting Room & Gate -->
     <section id="view-waiting" class="view">
       <div class="card glassmorphism text-center">
-        <div class="ticking-clock">
-          <div class="clock-hand"></div>
-        </div>
-        <h2 class="card-title">Sanctuary of Wait</h2>
-        <p class="status-badge waiting">Status: Waiting for Host</p>
-        <p class="card-description text-highlight">The scribe has not yet opened the gates. Please remain here. You will be automatically ushered forward when the quiz begins.</p>
-        
-        <div class="participant-info-summary">
-          <p>Logged in as: <span id="summary-participant-name" class="gold-text"></span></p>
-          <p>Session ID: <span id="summary-session-id" class="dim-text"></span></p>
+        <div id="waiting-loader-container">
+          <div class="ticking-clock">
+            <div class="clock-hand"></div>
+          </div>
+          <h2 class="card-title" id="waiting-title">Sanctuary of Wait</h2>
+          <p class="status-badge waiting" id="waiting-status">Status: Waiting for Host</p>
+          <p class="card-description text-highlight" id="waiting-desc">The scribe has not yet opened the gates. Please remain here. You will be automatically ushered forward when the quiz begins.</p>
+          
+          <div class="participant-info-summary">
+            <p>Logged in as: <span id="summary-participant-name" class="gold-text"></span></p>
+            <p>Session ID: <span id="summary-session-id" class="dim-text"></span></p>
+          </div>
+
+          <div class="loader-pulse" id="waiting-pulse">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
 
-        <div class="loader-pulse">
-          <span></span>
-          <span></span>
-          <span></span>
+        <div id="gate-container" style="display: none; margin-top: 2rem;">
+          <h2 class="card-title gold-text">The Gates Are Open!</h2>
+          <div class="gate-icon" style="font-size: 3rem; margin: 1rem 0; filter: drop-shadow(0 0 15px var(--color-gold-glow));">🔑</div>
+          <p class="card-description warning-text" style="color: var(--color-text-primary); background: rgba(239, 68, 68, 0.08); border-left: 3px solid var(--color-danger); padding: 1rem; border-radius: 0 6px 6px 0; text-align: left;">
+            <strong>WARNING:</strong> Entering the exam triggers strict anti-cheat tracking. Tabbing out, changing windows, or exiting fullscreen will count as security violations. Two violations will cause immediate automatic submission.
+          </p>
+          <p class="card-description">
+            Make sure all distractions are disabled and click below to enter fullscreen and start your speedrun.
+          </p>
+          <button id="btn-enter-fullscreen" class="btn-primary btn-gate" style="width: 100%; font-size: 1.1rem;">Enter Fullscreen & Start Exam</button>
         </div>
-      </div>
-    </section>
-
-    <!-- View 3: The Exam Gate -->
-    <section id="view-gate" class="view">
-      <div class="card glassmorphism text-center gate-card">
-        <h2 class="card-title gold-text">The Gate of Truth</h2>
-        <div class="gate-icon">🔑</div>
-        <p class="card-description warning-text">
-          <strong>WARNING:</strong> Entering the exam triggers strict anti-cheat tracking. Tabbing out, changing windows, or exiting fullscreen will count as security violations. Two violations will cause immediate automatic submission.
-        </p>
-        <p class="card-description">
-          Make sure all distractions are disabled and click below to enter fullscreen and start your speedrun.
-        </p>
-        <button id="btn-enter-fullscreen" class="btn-primary btn-gate">Enter Fullscreen & Start</button>
       </div>
     </section>
 
@@ -121,27 +120,53 @@
         </div>
       </div>
 
-      <!-- Main Quiz Card -->
-      <div class="quiz-card-container">
-        <!-- Progress Bar -->
-        <div class="progress-bar-wrapper">
-          <div id="quiz-progress-fill" class="progress-fill"></div>
-        </div>
-
-        <div class="card glassmorphism quiz-card">
-          <div class="question-header">
-            <span class="question-number-badge" id="question-index-badge">Q1</span>
-            <h3 class="question-text" id="question-content-text">Loading question text...</h3>
+      <!-- Main Quiz Container -->
+      <div id="quiz-main-layout" class="quiz-main-layout">
+        
+        <!-- Left: Question Area -->
+        <div class="quiz-left-column">
+          <div class="progress-bar-wrapper" id="progress-bar-wrapper">
+            <div id="quiz-progress-fill" class="progress-fill"></div>
           </div>
 
-          <div class="options-container" id="quiz-options-wrapper">
-            <!-- Shuffled options dynamically generated -->
+          <!-- Dynamic container for either paged mode or scroll mode -->
+          <div id="quiz-content-area">
+            <div class="card glassmorphism quiz-card paged-card">
+              <div class="question-header">
+                <span class="question-number-badge" id="question-index-badge">Q1</span>
+                <h3 class="question-text" id="question-content-text">Loading question text...</h3>
+              </div>
+              <div class="options-container" id="quiz-options-wrapper">
+                <!-- Shuffled options dynamically generated -->
+              </div>
+            </div>
           </div>
-
-          <div class="quiz-actions">
+          
+          <div class="quiz-footer-actions" id="quiz-footer-actions">
+            <button id="btn-prev-question" class="btn-secondary" style="display: none;">Previous</button>
             <button id="btn-next-question" class="btn-primary" disabled>Next Question</button>
           </div>
         </div>
+
+        <!-- Right: TCS Style Question Map -->
+        <div id="quiz-right-column" class="quiz-right-column" style="display: none;">
+          <div class="card glassmorphism map-card">
+            <h4 style="color: var(--color-gold); margin-top: 0; margin-bottom: 1rem; font-size: 1rem;">Question Map</h4>
+            <div id="question-map-grid" class="question-map-grid">
+              <!-- Dynamically populated buttons -->
+            </div>
+            
+            <div style="margin-top: 2rem;">
+              <button id="btn-submit-map" class="btn-primary btn-block">Submit Exam</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky Footer for Scroll Mode -->
+      <div id="scroll-sticky-footer" class="scroll-sticky-footer" style="display: none;">
+        <span id="footer-counter" class="footer-counter">Answered: 0 / 0</span>
+        <button id="btn-submit-scroll" class="btn-primary" style="padding: 0.8rem 2rem;">Submit Exam</button>
       </div>
     </section>
 
@@ -184,9 +209,11 @@
           </div>
           <div class="score-stat">
             <span class="stat-label">Violations</span>
-            <span class="stat-value" id="user-final-violations">0</span>
+            <span class="stat-value" id="user-final-violations" style="color: var(--color-danger);">0</span>
           </div>
         </div>
+        
+        <button id="btn-review-answers" class="btn-secondary" style="margin-bottom: 2rem;">🔍 Review Your Answers</button>
 
         <!-- Leaderboard Table -->
         <div class="leaderboard-container">
@@ -214,6 +241,21 @@
 
         <div class="results-actions text-center">
           <button id="btn-exit-to-menu" class="btn-primary">Return to Gates</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 7: The Evaluated Booklet -->
+    <section id="view-booklet" class="view">
+      <div class="card glassmorphism results-card text-center" style="max-width: 900px; margin: 0 auto; text-align: left;">
+        <h2 class="card-title gold-text text-center" style="margin-bottom: 2rem;">Your Evaluated Scroll</h2>
+        
+        <div id="booklet-content" style="display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2.5rem;">
+          <!-- Dynamically populated by app.js -->
+        </div>
+
+        <div class="text-center">
+          <button id="btn-back-leaderboard" class="btn-primary">Back to Leaderboard</button>
         </div>
       </div>
     </section>
