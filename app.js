@@ -41,6 +41,17 @@ if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE
 }
 
 // ----------------------------------------------------
+// 1.5. Dynamic Viewport Resizer
+// ----------------------------------------------------
+function setDynamicViewportHeight() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+window.addEventListener('resize', setDynamicViewportHeight);
+window.addEventListener('orientationchange', setDynamicViewportHeight);
+setDynamicViewportHeight();
+
+// ----------------------------------------------------
 // 2. Application State Variables
 // ----------------------------------------------------
 let state = {
@@ -484,6 +495,10 @@ el.btnEnterFullscreen.addEventListener("click", async () => {
     console.warn("Fullscreen request rejected or not supported. Proceeding anyway...", err);
     showToast("Warning: Fullscreen tracking may be limited on this browser.");
   }
+
+  // Recalculate viewport height once fullscreen transition starts
+  setTimeout(setDynamicViewportHeight, 200);
+  setTimeout(setDynamicViewportHeight, 600); // Safari fallback
 
   // Load questions and start the speedrun
   await loadAndInitializeQuiz();
