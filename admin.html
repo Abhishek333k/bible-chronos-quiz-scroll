@@ -390,6 +390,8 @@
         <button id="btn-export-csv" class="btn-secondary btn-block" style="display: none; border-color: var(--color-gold); color: var(--color-gold);">⬇️ Download Scroll (CSV)</button>
       </div>
 
+      <div id="live-telemetry-grid" class="telemetry-grid"></div>
+
       <hr class="divider" style="margin: 2rem 0;">
 
       <div>
@@ -460,6 +462,20 @@
       </section>
     </div>
 
+  </div>
+
+  <!-- Telemetry Overlay Modal -->
+  <div id="telemetry-modal" class="modal-overlay">
+    <div class="modal-content" style="border-color: var(--color-gold); max-width: 900px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(193, 154, 107, 0.15);">
+      <h2 id="telemetry-modal-title" class="modal-title" style="color: var(--color-gold-bright); text-shadow: none;">Monitoring Session</h2>
+      <p id="telemetry-modal-desc" style="color: var(--color-text-secondary); margin-bottom: 1.5rem;">Live Candidate Progress</p>
+      
+      <div id="modal-telemetry-grid" class="telemetry-grid" style="text-align: left; max-height: 60vh; overflow-y: auto; padding-right: 1rem;"></div>
+      
+      <div style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: center;">
+        <button id="btn-close-telemetry-modal" class="btn-secondary">Close Monitor</button>
+      </div>
+    </div>
   </div>
 
   <!-- Notification Toast for feedback -->

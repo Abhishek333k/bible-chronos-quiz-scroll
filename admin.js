@@ -12,7 +12,19 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let supabaseClient = null;
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (typeof window !== "undefined" && window.supabase) {
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: false
+        }
+      });
+    } catch (e) {
+      console.error("Failed to initialize Supabase client:", e);
+    }
+  } else {
+    console.error("Supabase library not loaded. Check network or ad-blocker settings.");
+  }
 } else {
   console.warn("Supabase is not initialized. Please configure credentials.");
 }
@@ -303,6 +315,7 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
     el.sessionPinContainer.style.display = 'block';
     el.liveSessionPin.value = accessPin;
     showToast("New Session Generated!");
+    syncTelemetrySubscription(accessPin);
   } catch (err) {
     alert("Failed to generate session: " + err.message);
   }
@@ -342,6 +355,7 @@ async function updateSessionStatus(status) {
     if (status === 'in_progress') {
       showToast(`▶ EXAM STARTED for PIN ${pin}!`);
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'none';
+      syncTelemetrySubscription(pin);
     } else {
       showToast(`⏹ EXAM ENDED for PIN ${pin}!`);
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'block';
@@ -631,28 +645,8 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
 });
 
 // ----------------------------------------------------
-// 9. Tab Navigation UI
+// 9. Tab Navigation UI (Initialized in DOM Load)
 // ----------------------------------------------------
-const tabBtns = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
-
-tabBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    // Remove active class from all buttons and contents
-    tabBtns.forEach(b => b.classList.remove('active'));
-    tabContents.forEach(c => c.classList.remove('active'));
-    
-    // Add active class to clicked button
-    btn.classList.add('active');
-    
-    // Show target content
-    const targetId = btn.getAttribute('data-target');
-    const targetContent = document.getElementById(targetId);
-    if (targetContent) {
-      targetContent.classList.add('active');
-    }
-  });
-});
 
 
 // ----------------------------------------------------
@@ -682,15 +676,19 @@ async function loadActiveSessions() {
     let html = '';
     sessions.forEach(session => {
       const quizTitle = session.quizzes ? session.quizzes.title : 'Unknown Quiz';
+      const cleanTitle = quizTitle.replace(/'/g, "\\'");
       html += `
         <div style="background: rgba(0,0,0,0.4); padding: 0.75rem 1rem; border-radius: 6px; border-left: 3px solid #10b981; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 0.2rem;">${quizTitle}</div>
             <div style="font-family: monospace; font-size: 1.1rem; color: var(--color-gold-bright); letter-spacing: 2px;">PIN: ${session.access_pin}</div>
           </div>
-          <div style="text-align: right;">
-            <div style="font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase;">Elapsed Time</div>
-            <div id="monitor-timer-${session.id}" style="font-family: monospace; font-size: 1.3rem; font-weight: bold; color: #10b981; text-shadow: 0 0 8px rgba(16,185,129,0.4);">00:00</div>
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <div style="text-align: right;">
+              <div style="font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase;">Elapsed Time</div>
+              <div id="monitor-timer-${session.id}" style="font-family: monospace; font-size: 1.3rem; font-weight: bold; color: #10b981; text-shadow: 0 0 8px rgba(16,185,129,0.4);">00:00</div>
+            </div>
+            <button class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: var(--color-gold); color: var(--color-gold);" onclick="openTelemetryModal('${session.access_pin}', '${cleanTitle}')">👁️ Monitor</button>
           </div>
         </div>
       `;
@@ -731,9 +729,178 @@ function startLiveMonitor() {
 }
 
 // ----------------------------------------------------
+// 11. Live Telemetry Subscription
+// ----------------------------------------------------
+let currentTelemetryChannel = null;
+
+async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
+  if (currentTelemetryChannel) {
+    console.log("Unsubscribing from telemetry channel...");
+    await currentTelemetryChannel.unsubscribe();
+    currentTelemetryChannel = null;
+  }
+  
+  const grid = document.getElementById(gridId);
+  if (!pin || !/^\d{6}$/.test(pin)) {
+    if (grid) {
+      grid.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;grid-column:1/-1;text-align:center;">Enter a valid 6-digit PIN to monitor candidate progress.</span>';
+    }
+    return;
+  }
+
+  if (grid) {
+    grid.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;grid-column:1/-1;text-align:center;">Waiting for candidate telemetry broadcasts...</span>';
+  }
+
+  try {
+    const { data: session, error } = await supabaseClient
+      .from('quiz_sessions')
+      .select('id')
+      .eq('access_pin', pin)
+      .single();
+
+    if (error || !session) {
+      console.warn("Could not find session for PIN:", pin);
+      if (grid) {
+        grid.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;grid-column:1/-1;text-align:center;">Session not found for PIN. Check the PIN and try again.</span>';
+      }
+      return;
+    }
+
+    console.log("Subscribing to telemetry for session:", session.id);
+    currentTelemetryChannel = supabaseClient
+      .channel(`quiz-session-${session.id}`)
+      .on(
+        'broadcast',
+        { event: 'telemetry' },
+        (payload) => {
+          console.log("Telemetry event received:", payload);
+          if (payload && payload.payload) {
+            updateTelemetryCard(payload.payload, gridId);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log(`Telemetry channel status: ${status}`);
+      });
+  } catch (err) {
+    console.error("Telemetry subscription error:", err);
+  }
+}
+
+function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
+  const grid = document.getElementById(gridId);
+  if (!grid || !data || !data.guestId) return;
+
+  // Clear placeholder if it's currently showing
+  const firstChild = grid.firstElementChild;
+  if (firstChild && firstChild.tagName === "SPAN") {
+    grid.innerHTML = "";
+  }
+
+  let card = document.getElementById(`candidate-card-${data.guestId}`);
+  if (!card) {
+    card = document.createElement("div");
+    card.id = `candidate-card-${data.guestId}`;
+    card.className = "candidate-card glassmorphism";
+    grid.appendChild(card);
+  }
+
+  const answered = data.answered || 0;
+  const total = data.total || 0;
+  const flagged = data.flagged || 0;
+  const progressPercent = total > 0 ? Math.round((answered / total) * 100) : 0;
+
+  card.innerHTML = `
+    <div class="candidate-header">
+      <span class="candidate-name" title="${data.name || 'Anonymous'}">${data.name || 'Anonymous'}</span>
+      <span class="candidate-flagged">🚩 ${flagged}</span>
+    </div>
+    <div class="candidate-progress-label">
+      <span>Progress</span>
+      <span>${answered}/${total}</span>
+    </div>
+    <div class="candidate-progress-bar-container">
+      <div class="candidate-progress-bar-fill" style="width: ${progressPercent}%"></div>
+    </div>
+  `;
+}
+
+window.openTelemetryModal = function(pin, title) {
+  const modal = document.getElementById("telemetry-modal");
+  const titleEl = document.getElementById("telemetry-modal-title");
+  
+  if (titleEl) titleEl.textContent = "Monitoring: " + title + " (PIN: " + pin + ")";
+  if (modal) modal.classList.add("active");
+
+  syncTelemetrySubscription(pin, "modal-telemetry-grid");
+};
+
+// ----------------------------------------------------
 // Initialization
 // ----------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
+function initializeAdminUI() {
   loadQuizzes();
   startLiveMonitor();
-});
+
+  // Initialize Tab Navigation
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      tabContents.forEach(c => c.classList.remove('active'));
+      
+      btn.classList.add('active');
+      
+      const targetId = btn.getAttribute('data-target');
+      const targetContent = document.getElementById(targetId);
+      if (targetContent) {
+        targetContent.classList.add('active');
+      }
+    });
+  });
+
+  // Set initial telemetry grid status message
+  const grid = document.getElementById("live-telemetry-grid");
+  if (grid && (!el.liveSessionPin || !el.liveSessionPin.value.trim())) {
+    grid.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;grid-column:1/-1;text-align:center;">Enter a valid 6-digit PIN to monitor candidate progress.</span>';
+  }
+
+  // Initialize telemetry subscription if PIN is already present
+  if (el.liveSessionPin) {
+    const pin = el.liveSessionPin.value.trim();
+    if (pin) syncTelemetrySubscription(pin);
+
+    // Event listener for user manually typing / changing the session PIN
+    el.liveSessionPin.addEventListener('input', () => {
+      const p = el.liveSessionPin.value.trim();
+      syncTelemetrySubscription(p);
+    });
+  }
+
+  const btnCloseModal = document.getElementById("btn-close-telemetry-modal");
+  if (btnCloseModal) {
+    btnCloseModal.addEventListener("click", async () => {
+      const modal = document.getElementById("telemetry-modal");
+      if (modal) modal.classList.remove("active");
+      
+      if (currentTelemetryChannel) {
+        await currentTelemetryChannel.unsubscribe();
+        currentTelemetryChannel = null;
+      }
+      
+      // Resubscribe to the main grid if a PIN is entered there
+      if (el.liveSessionPin && el.liveSessionPin.value.trim()) {
+        syncTelemetrySubscription(el.liveSessionPin.value.trim());
+      }
+    });
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeAdminUI);
+} else {
+  initializeAdminUI();
+}

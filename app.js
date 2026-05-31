@@ -23,8 +23,19 @@ let supabaseClient = null;
 
 // Initialize Supabase Client if credentials are provided
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
-  // Use window.supabase from the CDN to create the client instance
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (typeof window !== "undefined" && window.supabase) {
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: false
+        }
+      });
+    } catch (e) {
+      console.error("Failed to initialize Supabase client:", e);
+    }
+  } else {
+    console.error("Supabase library not loaded. Check network or ad-blocker settings.");
+  }
 } else {
   console.warn("Supabase is not initialized. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in app.js.");
 }
@@ -44,6 +55,7 @@ let state = {
   questions: [],
   currentQuestionIndex: 0,
   userAnswers: {}, // Format: { questionId: selectedOptionText }
+  reviewFlags: {}, // Format: { questionId: boolean }
 
   // Speedrun Timer State
   startTime: null,
@@ -501,6 +513,7 @@ async function loadAndInitializeQuiz() {
     state.questions = state.isJumbled ? fisherYatesShuffle(questions) : questions;
     state.currentQuestionIndex = 0;
     state.userAnswers = {};
+    state.reviewFlags = {};
     state.violationCount = 0;
     state.isDisqualified = false;
 
@@ -532,6 +545,7 @@ function updateFooterCounter() {
 function saveDisasterRecovery() {
   sessionStorage.setItem("inProgressQuiz", JSON.stringify({
     userAnswers: state.userAnswers,
+    reviewFlags: state.reviewFlags,
     currentQuestionIndex: state.currentQuestionIndex,
     guestId: state.guestId,
     sessionId: state.sessionId,
@@ -544,6 +558,22 @@ function saveDisasterRecovery() {
     isAntiCheatEnabled: state.isAntiCheatEnabled,
     savedTimeMs: state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs
   }));
+}
+
+function sendTelemetry() {
+  if (state.realtimeChannel) {
+    state.realtimeChannel.send({
+      type: 'broadcast',
+      event: 'telemetry',
+      payload: {
+        guestId: state.guestId,
+        name: state.name,
+        answered: Object.keys(state.userAnswers).length,
+        total: state.questions.length,
+        flagged: Object.keys(state.reviewFlags).length
+      }
+    });
+  }
 }
 
 function initializeQuizUI() {
@@ -562,6 +592,10 @@ function initializeQuizUI() {
           <h3 class="question-text">${q.question_text}</h3>
         </div>
         <div class="options-container" id="scroll-opts-${q.id}"></div>
+        <div class="question-actions">
+          <button class="btn-secondary btn-clear-response">🧹 Clear Response</button>
+          <button class="btn-secondary btn-mark-review">🚩 Mark for Review</button>
+        </div>
       `;
       el.quizContentArea.appendChild(qBlock);
       
@@ -590,9 +624,41 @@ function initializeQuizUI() {
           saveDisasterRecovery();
           updateFooterCounter();
           updateQuestionMap();
+          sendTelemetry();
         });
         optContainer.appendChild(btn);
       });
+
+      // Bind actions for this scroll question
+      const btnClear = qBlock.querySelector('.btn-clear-response');
+      const btnMark = qBlock.querySelector('.btn-mark-review');
+      if (btnClear) {
+        btnClear.addEventListener('click', () => {
+          delete state.userAnswers[q.id];
+          optContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+          saveDisasterRecovery();
+          updateFooterCounter();
+          updateQuestionMap();
+          sendTelemetry();
+        });
+      }
+      if (btnMark) {
+        if (state.reviewFlags[q.id]) {
+          btnMark.classList.add('active-review');
+        }
+        btnMark.addEventListener('click', () => {
+          if (state.reviewFlags[q.id]) {
+            delete state.reviewFlags[q.id];
+            btnMark.classList.remove('active-review');
+          } else {
+            state.reviewFlags[q.id] = true;
+            btnMark.classList.add('active-review');
+          }
+          saveDisasterRecovery();
+          updateQuestionMap();
+          sendTelemetry();
+        });
+      }
     });
     
     const bottomMapContainer = document.createElement('div');
@@ -614,6 +680,7 @@ function initializeQuizUI() {
     
     el.progressText.textContent = `ALL`;
     el.progressBarFill.style.width = `100%`;
+    sendTelemetry();
     
   } else {
     // Paged Mode
@@ -630,6 +697,10 @@ function initializeQuizUI() {
           <h3 class="question-text" id="question-content-text"></h3>
         </div>
         <div class="options-container" id="quiz-options-wrapper"></div>
+        <div class="question-actions">
+          <button class="btn-secondary btn-clear-response">🧹 Clear Response</button>
+          <button class="btn-secondary btn-mark-review">🚩 Mark for Review</button>
+        </div>
       </div>
     `;
     
@@ -654,10 +725,20 @@ function updateQuestionMap() {
       mapBtn.textContent = idx + 1;
       
       const answered = !!state.userAnswers[q.id];
-      if (answered) {
-        mapBtn.classList.add('answered');
+      const flagged = !!state.reviewFlags[q.id];
+      
+      if (flagged) {
+        if (answered) {
+          mapBtn.classList.add('map-review-answered');
+        } else {
+          mapBtn.classList.add('map-review-unanswered');
+        }
       } else {
-        mapBtn.classList.add('unanswered');
+        if (answered) {
+          mapBtn.classList.add('answered');
+        } else {
+          mapBtn.classList.add('unanswered');
+        }
       }
       
       if (state.displayMode === 'scroll') {
@@ -729,10 +810,44 @@ function renderQuestionPaged() {
       state.userAnswers[currentQuestion.id] = optText;
       saveDisasterRecovery();
       updateQuestionMap(); // Update grid style
+      sendTelemetry();
     });
     
     el.optionsWrapper.appendChild(button);
   });
+
+  // Bind actions for paged mode
+  const btnClear = el.quizContentArea.querySelector('.btn-clear-response');
+  const btnMark = el.quizContentArea.querySelector('.btn-mark-review');
+  if (btnClear) {
+    btnClear.onclick = () => {
+      delete state.userAnswers[currentQuestion.id];
+      el.optionsWrapper.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+      saveDisasterRecovery();
+      updateQuestionMap();
+      sendTelemetry();
+    };
+  }
+  if (btnMark) {
+    if (state.reviewFlags[currentQuestion.id]) {
+      btnMark.classList.add('active-review');
+    } else {
+      btnMark.classList.remove('active-review');
+    }
+    btnMark.onclick = () => {
+      if (state.reviewFlags[currentQuestion.id]) {
+        delete state.reviewFlags[currentQuestion.id];
+        btnMark.classList.remove('active-review');
+      } else {
+        state.reviewFlags[currentQuestion.id] = true;
+        btnMark.classList.add('active-review');
+      }
+      saveDisasterRecovery();
+      updateQuestionMap();
+      sendTelemetry();
+    };
+  }
+  sendTelemetry();
 }
 
 // Next/Submit Button Click Listener
@@ -1065,6 +1180,7 @@ el.btnExitToMenu.addEventListener("click", () => {
   state.questions = [];
   state.currentQuestionIndex = 0;
   state.userAnswers = {};
+  state.reviewFlags = {};
   state.violationCount = 0;
   state.isDisqualified = false;
 
@@ -1080,13 +1196,14 @@ el.btnExitToMenu.addEventListener("click", () => {
 // ----------------------------------------------------
 // 13. Disaster Recovery (Auto-Save Restore)
 // ----------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
+function restoreSavedSession() {
   const recoveryData = sessionStorage.getItem("inProgressQuiz");
   if (recoveryData) {
     try {
       const saved = JSON.parse(recoveryData);
       // Restore state
-      state.userAnswers = saved.userAnswers;
+      state.userAnswers = saved.userAnswers || {};
+      state.reviewFlags = saved.reviewFlags || {};
       state.currentQuestionIndex = saved.currentQuestionIndex;
       state.guestId = saved.guestId;
       state.sessionId = saved.sessionId;
@@ -1116,4 +1233,10 @@ document.addEventListener("DOMContentLoaded", () => {
       console.warn("Failed to parse recovery data", e);
     }
   }
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", restoreSavedSession);
+} else {
+  restoreSavedSession();
+}
