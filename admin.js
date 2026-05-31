@@ -46,6 +46,7 @@ const el = {
   liveSessionPin: document.getElementById('live-session-pin'),
   btnStartExam: document.getElementById('btn-start-exam'),
   btnEndExam: document.getElementById('btn-end-exam'),
+  btnExportCsv: document.getElementById('btn-export-csv'),
 
   // Panel 4: Ledger Management
   ledgerQuizList: document.getElementById('ledger-quiz-list'),
@@ -257,8 +258,13 @@ async function updateSessionStatus(status) {
 
     if (error) throw error;
 
-    if (status === 'in_progress') showToast(`▶ EXAM STARTED for PIN ${pin}!`);
-    else showToast(`⏹ EXAM ENDED for PIN ${pin}!`);
+    if (status === 'in_progress') {
+      showToast(`▶ EXAM STARTED for PIN ${pin}!`);
+      if (el.btnExportCsv) el.btnExportCsv.style.display = 'none';
+    } else {
+      showToast(`⏹ EXAM ENDED for PIN ${pin}!`);
+      if (el.btnExportCsv) el.btnExportCsv.style.display = 'block';
+    }
   } catch (err) {
     alert(`Failed to update status: ` + err.message);
   }
@@ -273,6 +279,77 @@ el.btnStartExam.addEventListener('click', () => {
 el.btnEndExam.addEventListener('click', () => {
   if (confirm("END the exam? This locks screens and displays the leaderboard.")) {
     updateSessionStatus('completed');
+  }
+});
+
+el.btnExportCsv.addEventListener('click', async () => {
+  const pin = el.liveSessionPin.value.trim();
+  if (!pin) return showToast("No active session PIN.");
+
+  try {
+    const { data: sessionData, error: sessionError } = await supabaseClient
+      .from('quiz_sessions')
+      .select('id')
+      .eq('access_pin', pin)
+      .single();
+      
+    if (sessionError || !sessionData) throw new Error("Could not find session by PIN.");
+
+    const { data: responses, error: respError } = await supabaseClient
+      .from('user_responses')
+      .select('*')
+      .eq('session_id', sessionData.id);
+
+    if (respError) throw respError;
+
+    if (!responses || responses.length === 0) {
+      return showToast("No responses found for this session.");
+    }
+
+    const userGroups = {};
+    responses.forEach(r => {
+      const key = r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
+      if (!userGroups[key]) {
+        userGroups[key] = {
+          name: r.participant_name,
+          email: r.participant_email || "Guest",
+          correctCount: 0,
+          totalCount: 0,
+          timeTakenMs: r.time_taken_ms,
+          isCheater: false
+        };
+      }
+      
+      if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
+      if (r.is_correct) userGroups[key].correctCount++;
+      userGroups[key].totalCount++;
+    });
+
+    const rankings = Object.values(userGroups).sort((a, b) => {
+      if (a.isCheater && !b.isCheater) return 1;
+      if (!a.isCheater && b.isCheater) return -1;
+      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+      return a.timeTakenMs - b.timeTakenMs;
+    });
+
+    let csvContent = "Rank,Name,Email,Score,Time (ms),Status\n";
+    rankings.forEach((player, idx) => {
+      const status = player.isCheater ? "DQ (Violations)" : "Completed";
+      csvContent += `${idx + 1},"${player.name}","${player.email}",${player.correctCount}/${player.totalCount},${player.timeTakenMs},"${status}"\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Chronos_Scroll_${pin}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+  } catch (err) {
+    alert("Export failed: " + err.message);
   }
 });
 

@@ -244,16 +244,24 @@ el.authForm.addEventListener("submit", async (e) => {
       .eq("id", session.quiz_id)
       .single();
 
+    // Ensure Guest ID exists
+    let guestId = sessionStorage.getItem("guest_id");
+    if (!guestId) {
+      guestId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'guest-' + Date.now() + Math.floor(Math.random()*1000);
+      sessionStorage.setItem("guest_id", guestId);
+    }
+
     // Store details in state
     state.name = name;
     state.email = email;
+    state.guestId = guestId;
     state.sessionId = session.id; // Store the actual UUID for backend operations
     state.quizId = session.quiz_id;
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
 
     // Setup UI summary
     el.summaryName.textContent = name;
-    el.summarySessionId.textContent = rawSessionId;
+    el.summarySessionId.textContent = rawSessionPin;
     el.quizTitleText.textContent = state.quizTitle;
 
     // Connect to real-time subscription for host state
@@ -436,6 +444,18 @@ function renderQuestion() {
       // Store selection
       state.userAnswers[currentQuestion.id] = optText;
       
+      // Disaster Recovery Auto-Save
+      sessionStorage.setItem("inProgressQuiz", JSON.stringify({
+        userAnswers: state.userAnswers,
+        currentQuestionIndex: state.currentQuestionIndex,
+        guestId: state.guestId,
+        sessionId: state.sessionId,
+        quizId: state.quizId,
+        name: state.name,
+        email: state.email,
+        questions: state.questions
+      }));
+      
       // Enable next button
       el.btnNextQuestion.disabled = false;
     });
@@ -602,7 +622,8 @@ async function submitQuiz(isForcedCheater = false) {
         selected_option: selectedOptionToSave,
         is_correct: isCorrectValue,
         participant_name: state.name,
-        participant_email: state.email,
+        participant_email: state.email || null,
+        participant_guest_id: state.guestId,
         time_taken_ms: state.totalTimeMs
       };
     });
@@ -616,6 +637,7 @@ async function submitQuiz(isForcedCheater = false) {
       throw error;
     }
 
+    sessionStorage.removeItem("inProgressQuiz");
     showToast("Exam results successfully certified on the scroll ledger.");
 
   } catch (err) {
@@ -742,6 +764,7 @@ el.btnRefreshLeaderboard.addEventListener("click", () => {
 
 el.btnExitToMenu.addEventListener("click", () => {
   // Clear local session state and clean up Realtime subscriptions
+  sessionStorage.removeItem("inProgressQuiz");
   if (state.realtimeChannel) {
     state.realtimeChannel.unsubscribe();
     state.realtimeChannel = null;
@@ -749,6 +772,7 @@ el.btnExitToMenu.addEventListener("click", () => {
   
   state.name = "";
   state.email = "";
+  state.guestId = "";
   state.sessionId = "";
   state.quizId = "";
   state.questions = [];
@@ -764,4 +788,42 @@ el.btnExitToMenu.addEventListener("click", () => {
   submitBtn.textContent = "Join Session";
 
   showView("view-auth");
+});
+
+// ----------------------------------------------------
+// 13. Disaster Recovery (Auto-Save Restore)
+// ----------------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  const recoveryData = sessionStorage.getItem("inProgressQuiz");
+  if (recoveryData) {
+    try {
+      const saved = JSON.parse(recoveryData);
+      // Restore state
+      state.userAnswers = saved.userAnswers;
+      state.currentQuestionIndex = saved.currentQuestionIndex;
+      state.guestId = saved.guestId;
+      state.sessionId = saved.sessionId;
+      state.quizId = saved.quizId;
+      state.name = saved.name;
+      state.email = saved.email;
+      state.questions = saved.questions;
+      
+      // Update UI summary
+      el.summaryName.textContent = state.name;
+      
+      // Resubscribe to realtime
+      subscribeToSession();
+      
+      // Restore to quiz view immediately
+      showView("view-quiz");
+      renderQuestion();
+      startTimer(); // Restart clock (note: total time will be a bit off, but it's okay for disaster recovery)
+      
+      // Trigger anti-cheat for reloading
+      handleViolation("Page Reload / Disaster Recovery Triggered");
+      
+    } catch (e) {
+      console.warn("Failed to parse recovery data", e);
+    }
+  }
 });
