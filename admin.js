@@ -656,8 +656,84 @@ tabBtns.forEach(btn => {
 
 
 // ----------------------------------------------------
+// 10. Fleet Monitor Logic
+// ----------------------------------------------------
+let activeSessionsTimers = {};
+
+async function loadActiveSessions() {
+  if (!supabaseClient) return;
+  const listEl = document.getElementById('active-sessions-list');
+  if (!listEl) return;
+
+  try {
+    const { data: sessions, error } = await supabaseClient
+      .from('quiz_sessions')
+      .select('id, access_pin, started_at, quizzes(title)')
+      .eq('status', 'in_progress')
+      .order('started_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!sessions || sessions.length === 0) {
+      listEl.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;">No active sessions currently running.</span>';
+      return;
+    }
+
+    let html = '';
+    sessions.forEach(session => {
+      const quizTitle = session.quizzes ? session.quizzes.title : 'Unknown Quiz';
+      html += `
+        <div style="background: rgba(0,0,0,0.4); padding: 0.75rem 1rem; border-radius: 6px; border-left: 3px solid #10b981; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 0.2rem;">${quizTitle}</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: var(--color-gold-bright); letter-spacing: 2px;">PIN: ${session.access_pin}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase;">Elapsed Time</div>
+            <div id="monitor-timer-${session.id}" style="font-family: monospace; font-size: 1.3rem; font-weight: bold; color: #10b981; text-shadow: 0 0 8px rgba(16,185,129,0.4);">00:00</div>
+          </div>
+        </div>
+      `;
+    });
+    
+    // Only update innerHTML if it has structurally changed to avoid resetting timers if possible
+    // For simplicity, we just overwrite and restart intervals, but a better way is to update DOM delta.
+    listEl.innerHTML = html;
+
+    // Clear old intervals
+    Object.values(activeSessionsTimers).forEach(clearInterval);
+    activeSessionsTimers = {};
+
+    // Start local ticking
+    sessions.forEach(session => {
+      if (!session.started_at) return;
+      const startTime = new Date(session.started_at).getTime();
+      const elTimer = document.getElementById(`monitor-timer-${session.id}`);
+      
+      activeSessionsTimers[session.id] = setInterval(() => {
+        const deltaMs = Date.now() - startTime;
+        if (deltaMs < 0) return;
+        const totalSeconds = Math.floor(deltaMs / 1000);
+        const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const secs = String(totalSeconds % 60).padStart(2, '0');
+        if (elTimer) elTimer.textContent = `${mins}:${secs}`;
+      }, 1000);
+    });
+
+  } catch (err) {
+    console.warn("Monitor Error:", err.message);
+  }
+}
+
+function startLiveMonitor() {
+  loadActiveSessions();
+  setInterval(loadActiveSessions, 5000);
+}
+
+// ----------------------------------------------------
 // Initialization
 // ----------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   loadQuizzes();
+  startLiveMonitor();
 });

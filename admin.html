@@ -336,7 +336,7 @@
             <span class="toggle-switch-desc">Randomize the order for each participant</span>
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" id="session-is-jumbled" checked>
+            <input type="checkbox" id="session-is-jumbled">
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -388,6 +388,15 @@
         <button id="btn-start-exam" class="btn-primary btn-start btn-block">▶ START EXAM</button>
         <button id="btn-end-exam" class="btn-primary btn-end btn-block">⏹ END EXAM & PUBLISH RESULTS</button>
         <button id="btn-export-csv" class="btn-secondary btn-block" style="display: none; border-color: var(--color-gold); color: var(--color-gold);">⬇️ Download Scroll (CSV)</button>
+      </div>
+
+      <hr class="divider" style="margin: 2rem 0;">
+
+      <div>
+        <h3 style="color: var(--color-gold); font-size: 1.1rem; margin-bottom: 1rem;">Active Sessions Monitor</h3>
+        <div id="active-sessions-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- Populated by JS -->
+        </div>
       </div>
       </section>
     </div>

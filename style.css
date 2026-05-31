@@ -1360,3 +1360,13 @@ input:checked + .toggle-slider:before {
   background: rgba(239, 68, 68, 0.2);
   box-shadow: 0 0 10px var(--color-danger-glow);
 }
+
+/* Booklet & Scroll Map Styles */
+.scroll-bottom-map { padding: 1.5rem; }
+.map-btn.unanswered { border: 2px solid rgba(239, 68, 68, 0.6); }
+.booklet-card { margin-bottom: 1.5rem; padding: 1.5rem; }
+.booklet-question-text { font-family: var(--font-serif); font-size: 1.2rem; margin-bottom: 1rem; color: var(--color-gold); }
+.booklet-answers { background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; }
+.booklet-label { color: var(--color-text-secondary); font-size: 0.9rem; margin-right: 0.5rem; }
+.answer-correct { color: #10b981; font-weight: 600; }
+.answer-wrong { color: #ef4444; font-weight: 600; text-decoration: line-through; }

@@ -182,9 +182,39 @@ function showView(viewId) {
 // ----------------------------------------------------
 // 15. The Booklet View (Evaluated Scroll)
 // ----------------------------------------------------
-el.btnReviewAnswers.addEventListener('click', () => {
+async function loadQuestionsIfNeeded() {
+  if (state.questions && state.questions.length > 0) return;
+  try {
+    const { data: questions } = await supabaseClient.from("questions").select("*").eq("quiz_id", state.quizId);
+    if (questions) state.questions = questions;
+  } catch(e) { console.error(e); }
+}
+
+async function loadUserAnswersIfNeeded() {
+  if (Object.keys(state.userAnswers).length > 0) return;
+  try {
+    const { data: responses } = await supabaseClient.from("user_responses").select("question_id, selected_option").eq("session_id", state.sessionId).eq("participant_guest_id", state.guestId);
+    if (responses) {
+      responses.forEach(r => {
+        state.userAnswers[r.question_id] = r.selected_option;
+      });
+    }
+  } catch(e) { console.error(e); }
+}
+
+el.btnReviewAnswers.addEventListener('click', async () => {
+  const originalText = el.btnReviewAnswers.textContent;
+  el.btnReviewAnswers.textContent = "Loading Booklet...";
+  el.btnReviewAnswers.disabled = true;
+  
+  await loadQuestionsIfNeeded();
+  await loadUserAnswersIfNeeded();
+  
   renderBooklet();
   showView("view-booklet");
+  
+  el.btnReviewAnswers.textContent = originalText;
+  el.btnReviewAnswers.disabled = false;
 });
 
 el.btnBackLeaderboard.addEventListener('click', () => {
@@ -202,33 +232,35 @@ function renderBooklet() {
     const isCorrect = userChoice === correctChoice;
     
     const block = document.createElement('div');
-    block.className = 'booklet-question';
+    block.className = 'booklet-card card glassmorphism';
     
     let answerHtml = '';
     
     if (isCorrect) {
       answerHtml = `
-        <div class="booklet-answer-box booklet-correct">
-          <div class="answer-label">✅ Correct</div>
-          <div>${userChoice}</div>
+        <div class="booklet-answer-box">
+          <span class="booklet-label">Your Answer:</span>
+          <span class="answer-correct">${userChoice}</span>
         </div>
       `;
     } else {
       answerHtml = `
-        <div class="booklet-answer-box booklet-incorrect">
-          <div class="answer-label">❌ Incorrect</div>
-          <div><del>${userChoice}</del></div>
+        <div class="booklet-answer-box">
+          <span class="booklet-label">Your Answer:</span>
+          <span class="answer-wrong">${userChoice}</span>
         </div>
-        <div class="booklet-actual-correct">
-          <span>Actual Correct Answer:</span><br>
-          ${correctChoice}
+        <div class="booklet-answer-box" style="margin-top: 0.5rem;">
+          <span class="booklet-label">Correct Answer:</span>
+          <span class="answer-correct">${correctChoice}</span>
         </div>
       `;
     }
     
     block.innerHTML = `
-      <h4>Q${idx + 1}. ${q.question_text}</h4>
-      ${answerHtml}
+      <h4 class="booklet-question-text">Q${idx + 1}. ${q.question_text}</h4>
+      <div class="booklet-answers">
+        ${answerHtml}
+      </div>
     `;
     
     el.bookletContent.appendChild(block);
@@ -522,6 +554,7 @@ function initializeQuizUI() {
     
     state.questions.forEach((q, index) => {
       const qBlock = document.createElement('div');
+      qBlock.id = 'scroll-q-' + index;
       qBlock.className = 'scroll-question-block card glassmorphism paged-card';
       qBlock.innerHTML = `
         <div class="question-header">
@@ -561,6 +594,16 @@ function initializeQuizUI() {
       });
     });
     
+    const bottomMapContainer = document.createElement('div');
+    bottomMapContainer.className = 'scroll-bottom-map card glassmorphism';
+    bottomMapContainer.style.marginTop = '2rem';
+    bottomMapContainer.innerHTML = `
+      <h3 style="text-align:center; color:var(--color-gold); margin-bottom:1rem; font-family:var(--font-serif);">Scroll Wayfinder</h3>
+      <div class="question-map-grid" id="scroll-bottom-map-grid"></div>
+    `;
+    el.quizContentArea.appendChild(bottomMapContainer);
+    updateQuestionMap();
+    
     // Toggle layout padding
     document.getElementById('quiz-main-layout').classList.add('scroll-mode-padding');
     
@@ -598,19 +641,38 @@ function initializeQuizUI() {
 }
 
 function updateQuestionMap() {
-  el.questionMapGrid.innerHTML = '';
-  state.questions.forEach((q, idx) => {
-    const mapBtn = document.createElement('button');
-    mapBtn.className = 'map-btn';
-    mapBtn.textContent = idx + 1;
-    if (state.userAnswers[q.id]) mapBtn.classList.add('answered');
-    if (idx === state.currentQuestionIndex) mapBtn.classList.add('current');
-    
-    mapBtn.addEventListener('click', () => {
-      state.currentQuestionIndex = idx;
-      renderQuestionPaged();
+  const grids = [el.questionMapGrid];
+  const scrollGrid = document.getElementById('scroll-bottom-map-grid');
+  if (scrollGrid) grids.push(scrollGrid);
+
+  grids.forEach(grid => {
+    grid.innerHTML = '';
+    state.questions.forEach((q, idx) => {
+      const mapBtn = document.createElement('button');
+      mapBtn.className = 'map-btn';
+      mapBtn.textContent = idx + 1;
+      
+      const answered = !!state.userAnswers[q.id];
+      if (answered) {
+        mapBtn.classList.add('answered');
+      } else {
+        mapBtn.classList.add('unanswered');
+      }
+      
+      if (state.displayMode === 'scroll') {
+        mapBtn.addEventListener('click', () => {
+          const target = document.getElementById('scroll-q-' + idx);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      } else {
+        if (idx === state.currentQuestionIndex) mapBtn.classList.add('current');
+        mapBtn.addEventListener('click', () => {
+          state.currentQuestionIndex = idx;
+          renderQuestionPaged();
+        });
+      }
+      grid.appendChild(mapBtn);
     });
-    el.questionMapGrid.appendChild(mapBtn);
   });
 }
 
