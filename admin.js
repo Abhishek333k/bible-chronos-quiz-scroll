@@ -34,10 +34,15 @@ const el = {
   optC: document.getElementById('opt-c'),
   optD: document.getElementById('opt-d'),
   correctAnswer: document.getElementById('correct-answer'),
+  formImportCsv: document.getElementById('form-import-csv'),
+  selectQuizImport: document.getElementById('select-quiz-import'),
+  fileImportCsv: document.getElementById('file-import-csv'),
 
   // Panel 2: Session Generator
   formGenerateSession: document.getElementById('form-generate-session'),
   selectQuizSession: document.getElementById('select-quiz-session'),
+  sessionIsJumbled: document.getElementById('session-is-jumbled'),
+  sessionDisplayMode: document.getElementById('session-display-mode'),
   sessionPinContainer: document.getElementById('session-pin-container'),
   displayPin: document.getElementById('display-pin'),
   btnCopyPin: document.getElementById('btn-copy-pin'),
@@ -61,6 +66,8 @@ const el = {
   editOptC: document.getElementById('edit-opt-c'),
   editOptD: document.getElementById('edit-opt-d'),
   editQCorrect: document.getElementById('edit-q-correct'),
+  btnAddQuestionLedger: document.getElementById('btn-add-new-question-ledger'),
+  editQuestionTitle: document.getElementById('edit-question-title'),
 
   // Feedback Toast
   toast: document.getElementById('notification-toast'),
@@ -101,7 +108,7 @@ async function loadQuizzes() {
 
     quizzes.forEach(quiz => {
       // Add to dropdowns
-      [el.selectQuizAdd, el.selectQuizSession, el.ledgerSelectQuiz].forEach(selectEl => {
+      [el.selectQuizAdd, el.selectQuizImport, el.selectQuizSession, el.ledgerSelectQuiz].forEach(selectEl => {
         const option = document.createElement('option');
         option.value = quiz.id;
         option.textContent = quiz.title;
@@ -118,7 +125,10 @@ async function loadQuizzes() {
       quizItem.style.borderRadius = '6px';
       quizItem.innerHTML = `
         <span style="font-weight: 600; font-family: var(--font-sans);">${quiz.title}</span>
-        <button class="btn-primary" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteQuiz('${quiz.id}', '${quiz.title.replace(/'/g, "\\'")}')">Delete</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-color: var(--color-gold); color: var(--color-gold);" onclick="backupQuiz('${quiz.id}', '${quiz.title.replace(/'/g, "\\'")}')">💾 Backup</button>
+          <button class="btn-primary" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteQuiz('${quiz.id}', '${quiz.title.replace(/'/g, "\\'")}')">Delete</button>
+        </div>
       `;
       el.ledgerQuizList.appendChild(quizItem);
     });
@@ -193,6 +203,70 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
   }
 });
 
+el.formImportCsv.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!supabaseClient) return;
+
+  const quizId = el.selectQuizImport.value;
+  const file = el.fileImportCsv.files[0];
+  if (!quizId || !file) return showToast("Select quiz and file.");
+
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const text = event.target.result;
+      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+      if (lines.length < 2) throw new Error("CSV requires a header row and data.");
+
+      const questionsToInsert = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = [];
+        let current = '';
+        let inQuotes = false;
+        const line = lines[i];
+        
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          if (char === '"') {
+            if (inQuotes && line[j + 1] === '"') {
+              current += '"';
+              j++; // skip the escaped quote
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            cols.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        cols.push(current.trim()); // push the last column
+
+        if (cols.length < 6) continue;
+
+        questionsToInsert.push({
+          quiz_id: quizId,
+          question_text: cols[0],
+          options: [cols[1], cols[2], cols[3], cols[4]],
+          correct_option: cols[5]
+        });
+      }
+
+      if (questionsToInsert.length === 0) throw new Error("No valid rows parsed.");
+
+      const { error } = await supabaseClient.from('questions').insert(questionsToInsert);
+      if (error) throw error;
+
+      showToast(`Imported ${questionsToInsert.length} questions!`);
+      el.formImportCsv.reset();
+    } catch (err) {
+      alert("CSV Import Error: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
 // ----------------------------------------------------
 // 6. Panel 2: Session Generator (The Gates)
 // ----------------------------------------------------
@@ -208,12 +282,17 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
   const accessPin = Math.floor(100000 + Math.random() * 900000).toString();
 
   try {
+    const isJumbled = el.sessionIsJumbled.checked;
+    const displayMode = el.sessionDisplayMode.value;
+
     const { error } = await supabaseClient
       .from('quiz_sessions')
       .insert([{
         quiz_id: quizId,
         status: 'waiting',
-        access_pin: accessPin
+        access_pin: accessPin,
+        is_jumbled: isJumbled,
+        display_mode: displayMode
       }]);
 
     if (error) throw error;
@@ -338,7 +417,7 @@ el.btnExportCsv.addEventListener('click', async () => {
       csvContent += `${idx + 1},"${player.name}","${player.email}",${player.correctCount}/${player.totalCount},${player.timeTakenMs},"${status}"\n`;
     });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -379,6 +458,42 @@ window.deleteQuiz = async function(quizId, quizTitle) {
   }
 };
 
+window.backupQuiz = async function(quizId, quizTitle) {
+  try {
+    const { data: questions, error } = await supabaseClient
+      .from('questions')
+      .select('*')
+      .eq('quiz_id', quizId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    
+    if (!questions || questions.length === 0) {
+      return showToast("No questions in this quiz to backup.");
+    }
+
+    let csvContent = "Question Text,Option A,Option B,Option C,Option D,Correct Option\n";
+    questions.forEach(q => {
+      const escape = (str) => `"${(str || "").replace(/"/g, '""')}"`;
+      const opts = q.options || ["", "", "", ""];
+      csvContent += `${escape(q.question_text)},${escape(opts[0])},${escape(opts[1])},${escape(opts[2])},${escape(opts[3])},${escape(q.correct_option)}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${quizTitle.replace(/\s+/g, '_')}_Backup.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Backup of "${quizTitle}" downloaded!`);
+  } catch (err) {
+    alert("Backup failed: " + err.message);
+  }
+};
+
 el.ledgerSelectQuiz.addEventListener('change', async () => {
   const quizId = el.ledgerSelectQuiz.value;
   if (!quizId) return;
@@ -398,28 +513,38 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
     el.ledgerQuestionsList.innerHTML = '';
     if (questions.length === 0) {
       el.ledgerQuestionsList.innerHTML = '<span style="color:var(--color-text-secondary);">No questions exist yet.</span>';
-      return;
+    } else {
+      questions.forEach((q, index) => {
+        const qItem = document.createElement('div');
+        qItem.style.background = 'rgba(0,0,0,0.4)';
+        qItem.style.padding = '0.75rem';
+        qItem.style.borderRadius = '6px';
+        qItem.style.borderLeft = '3px solid var(--color-gold)';
+        qItem.innerHTML = `
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">Q${index + 1}: ${q.question_text}</div>
+          <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick='openQuestionEditor(${JSON.stringify(q).replace(/'/g, "&apos;")})'>Edit</button>
+        `;
+        el.ledgerQuestionsList.appendChild(qItem);
+      });
     }
-    
-    questions.forEach((q, index) => {
-      const qItem = document.createElement('div');
-      qItem.style.background = 'rgba(0,0,0,0.4)';
-      qItem.style.padding = '0.75rem';
-      qItem.style.borderRadius = '6px';
-      qItem.style.borderLeft = '3px solid var(--color-gold)';
-      qItem.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 0.5rem;">Q${index + 1}: ${q.question_text}</div>
-        <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick='openQuestionEditor(${JSON.stringify(q).replace(/'/g, "&apos;")})'>Edit</button>
-      `;
-      el.ledgerQuestionsList.appendChild(qItem);
-    });
+
+    el.btnAddQuestionLedger.style.display = 'block';
     
   } catch (err) {
     alert("Failed to load questions: " + err.message);
   }
 });
 
+el.btnAddQuestionLedger.addEventListener('click', () => {
+  el.editQuestionTitle.textContent = "Add New Question";
+  el.editQId.value = "NEW";
+  el.formEditQuestion.reset();
+  el.editQuestionContainer.style.display = "block";
+  el.editQuestionContainer.scrollIntoView({ behavior: 'smooth' });
+});
+
 window.openQuestionEditor = function(questionData) {
+  el.editQuestionTitle.textContent = "Edit Selected Question";
   el.editQId.value = questionData.id;
   el.editQText.value = questionData.question_text;
   
@@ -453,26 +578,62 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
   }
   
   try {
-    const { error } = await supabaseClient
-      .from('questions')
-      .update({
+    if (qId === "NEW") {
+      const quizId = el.ledgerSelectQuiz.value;
+      const { error } = await supabaseClient.from('questions').insert([{
+        quiz_id: quizId,
         question_text: qText,
         options: optionsArray,
         correct_option: correct
-      })
-      .eq('id', qId);
-      
-    if (error) throw error;
+      }]);
+      if (error) throw error;
+      showToast("Question added successfully!");
+    } else {
+      const { error } = await supabaseClient
+        .from('questions')
+        .update({
+          question_text: qText,
+          options: optionsArray,
+          correct_option: correct
+        })
+        .eq('id', qId);
+      if (error) throw error;
+      showToast("Question updated successfully!");
+    }
     
-    showToast("Question updated successfully!");
     el.editQuestionContainer.style.display = "none";
     
     // Refresh the questions list
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
   } catch(err) {
-    alert("Failed to update question: " + err.message);
+    alert("Failed to save question: " + err.message);
   }
 });
+
+// ----------------------------------------------------
+// 9. Tab Navigation UI
+// ----------------------------------------------------
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Remove active class from all buttons and contents
+    tabBtns.forEach(b => b.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+    
+    // Add active class to clicked button
+    btn.classList.add('active');
+    
+    // Show target content
+    const targetId = btn.getAttribute('data-target');
+    const targetContent = document.getElementById(targetId);
+    if (targetContent) {
+      targetContent.classList.add('active');
+    }
+  });
+});
+
 
 // ----------------------------------------------------
 // Initialization
