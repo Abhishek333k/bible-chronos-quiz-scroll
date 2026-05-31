@@ -589,6 +589,7 @@ function initializeQuizUI() {
           state.userAnswers[q.id] = optText;
           saveDisasterRecovery();
           updateFooterCounter();
+          updateQuestionMap();
         });
         optContainer.appendChild(btn);
       });
