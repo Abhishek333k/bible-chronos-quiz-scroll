@@ -43,6 +43,7 @@ const el = {
   selectQuizSession: document.getElementById('select-quiz-session'),
   sessionIsJumbled: document.getElementById('session-is-jumbled'),
   sessionDisplayMode: document.getElementById('session-display-mode'),
+  sessionAntiCheat: document.getElementById('session-anti-cheat'),
   sessionPinContainer: document.getElementById('session-pin-container'),
   displayPin: document.getElementById('display-pin'),
   btnCopyPin: document.getElementById('btn-copy-pin'),
@@ -292,7 +293,8 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
         status: 'waiting',
         access_pin: accessPin,
         is_jumbled: isJumbled,
-        display_mode: displayMode
+        display_mode: displayMode,
+        is_anti_cheat_enabled: el.sessionAntiCheat ? el.sessionAntiCheat.checked : true
       }]);
 
     if (error) throw error;
@@ -516,13 +518,16 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
     } else {
       questions.forEach((q, index) => {
         const qItem = document.createElement('div');
-        qItem.style.background = 'rgba(0,0,0,0.4)';
-        qItem.style.padding = '0.75rem';
-        qItem.style.borderRadius = '6px';
-        qItem.style.borderLeft = '3px solid var(--color-gold)';
+        qItem.className = 'question-list-item';
         qItem.innerHTML = `
-          <div style="font-weight: 600; margin-bottom: 0.5rem;">Q${index + 1}: ${q.question_text}</div>
-          <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick='openQuestionEditor(${JSON.stringify(q).replace(/'/g, "&apos;")})'>Edit</button>
+          <div class="question-list-content">
+            <div style="font-weight: 600; margin-bottom: 0.25rem;">Q${index + 1}: ${q.question_text}</div>
+            <div style="font-size: 0.8rem; color: var(--color-text-secondary);">Correct: ${q.correct_option}</div>
+          </div>
+          <div class="question-list-actions">
+            <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick='openQuestionEditor(${JSON.stringify(q).replace(/'/g, "&apos;")})'>Edit</button>
+            <button class="btn-danger" onclick='deleteQuestion("${q.id}")'>Delete</button>
+          </div>
         `;
         el.ledgerQuestionsList.appendChild(qItem);
       });
@@ -557,7 +562,22 @@ window.openQuestionEditor = function(questionData) {
   
   el.editQCorrect.value = questionData.correct_option;
   el.editQuestionContainer.style.display = "block";
-  el.editQuestionContainer.scrollIntoView({ behavior: 'smooth' });
+  el.editQuestionContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.deleteQuestion = async function(questionId) {
+  if (!confirm("Are you sure you want to delete this question? This action cannot be undone.")) return;
+  try {
+    const { error } = await supabaseClient
+      .from('questions')
+      .delete()
+      .eq('id', questionId);
+    if (error) throw error;
+    showToast("Question deleted successfully.");
+    el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
+  } catch (err) {
+    alert("Failed to delete question: " + err.message);
+  }
 };
 
 el.formEditQuestion.addEventListener('submit', async (e) => {

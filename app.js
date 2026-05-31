@@ -53,9 +53,10 @@ let state = {
 
   // Anti-Cheat Variables
   violationCount: 0,
-  maxViolations: 2,
+  maxViolations: 3,
   isDisqualified: false,
   isCheatModalOpen: false,
+  isAntiCheatEnabled: true,
 
   // Navigation / Views State
   currentView: "view-auth",
@@ -341,6 +342,7 @@ el.authForm.addEventListener("submit", async (e) => {
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
     state.isJumbled = session.is_jumbled === false ? false : true;
     state.displayMode = session.display_mode || 'paged';
+    state.isAntiCheatEnabled = session.is_anti_cheat_enabled !== false;
 
     // Setup UI summary
     el.summaryName.textContent = name;
@@ -506,7 +508,9 @@ function saveDisasterRecovery() {
     email: state.email,
     questions: state.questions,
     isJumbled: state.isJumbled,
-    displayMode: state.displayMode
+    displayMode: state.displayMode,
+    isAntiCheatEnabled: state.isAntiCheatEnabled,
+    savedTimeMs: state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs
   }));
 }
 
@@ -557,8 +561,9 @@ function initializeQuizUI() {
       });
     });
     
-    // Hide inline submit button, show sticky footer
-    if (el.btnSubmitScroll) el.btnSubmitScroll.style.display = 'none';
+    // Toggle layout padding
+    document.getElementById('quiz-main-layout').classList.add('scroll-mode-padding');
+    
     if (el.scrollStickyFooter) el.scrollStickyFooter.style.display = 'flex';
     
     updateFooterCounter();
@@ -568,6 +573,7 @@ function initializeQuizUI() {
     
   } else {
     // Paged Mode
+    document.getElementById('quiz-main-layout').classList.remove('scroll-mode-padding');
     el.quizRightColumn.style.display = 'block';
     el.quizFooterActions.style.display = 'flex';
     if (el.btnSubmitScroll) el.btnSubmitScroll.style.display = 'none';
@@ -703,8 +709,8 @@ el.btnSubmitMap.addEventListener("click", () => {
 // ----------------------------------------------------
 // 10. Speedrun Timer Mechanism
 // ----------------------------------------------------
-function startTimer() {
-  state.startTime = performance.now();
+function startTimer(offsetMs = 0) {
+  state.startTime = performance.now() - offsetMs;
   state.isTimerRunning = true;
   
   function updateClock() {
@@ -732,7 +738,8 @@ function stopTimer() {
 
 function handleViolation(reason) {
   // If we are not actively in the quiz view or already DQ'd, ignore
-  if (state.currentView !== "view-quiz" || state.isDisqualified) return;
+  // Also ignore if Anti-Cheat is disabled for this session
+  if (!state.isAntiCheatEnabled || state.currentView !== "view-quiz" || state.isDisqualified) return;
 
   state.violationCount++;
   console.warn(`Anti-Cheat Triggered. Reason: ${reason}. Violation count: ${state.violationCount}`);
@@ -998,7 +1005,7 @@ el.btnExitToMenu.addEventListener("click", () => {
   state.violationCount = 0;
   state.isDisqualified = false;
 
-  el.inputSessionId.value = "";
+  if (el.inputSessionPin) el.inputSessionPin.value = "";
   
   const submitBtn = document.getElementById("btn-join-session");
   submitBtn.disabled = false;
@@ -1026,6 +1033,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.questions = saved.questions;
       state.isJumbled = saved.isJumbled !== undefined ? saved.isJumbled : true;
       state.displayMode = saved.displayMode || 'paged';
+      state.isAntiCheatEnabled = saved.isAntiCheatEnabled !== false;
       
       // Update UI summary
       el.summaryName.textContent = state.name;
@@ -1036,7 +1044,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // Restore to quiz view immediately
       showView("view-quiz");
       initializeQuizUI();
-      startTimer(); // Restart clock (note: total time will be a bit off, but it's okay for disaster recovery)
+      startTimer(saved.savedTimeMs || 0); // Resume clock exactly where it was left off
       
       // Trigger anti-cheat for reloading
       handleViolation("Page Reload / Disaster Recovery Triggered");

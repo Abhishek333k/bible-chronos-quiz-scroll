@@ -527,6 +527,11 @@ body::after {
   max-width: 1100px;
   align-items: flex-start;
   margin-top: 5rem;
+  transition: padding-bottom 0.3s ease;
+}
+
+.scroll-mode-padding {
+  padding-bottom: 100px;
 }
 
 .quiz-left-column {
@@ -642,6 +647,11 @@ body::after {
     display: flex;
     overflow-x: auto;
     padding-bottom: 0.5rem;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .question-map-grid::-webkit-scrollbar {
+    display: none;
   }
   .map-btn {
     flex: 0 0 auto;
@@ -1197,4 +1207,156 @@ body::after {
   .timer-digits {
     font-size: 1.1rem;
   }
+}
+
+/* ----------------------------------------------------
+   18. Custom Toggle Switch
+   ---------------------------------------------------- */
+.toggle-switch-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1rem 1.5rem;
+  border: 1px solid var(--border-gold);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.toggle-switch-label {
+  display: flex;
+  flex-direction: column;
+}
+
+.toggle-switch-title {
+  color: var(--color-gold-bright);
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.2rem;
+}
+
+.toggle-switch-desc {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+}
+
+.toggle-switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .4s;
+  border-radius: 34px;
+  border: 1px solid var(--border-gold);
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: '';
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--color-text-secondary);
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: var(--color-gold);
+  border-color: var(--color-gold-bright);
+}
+
+input:focus + .toggle-slider {
+  box-shadow: 0 0 10px var(--color-gold-glow);
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+  background-color: #0d0d0f;
+}
+
+/* ----------------------------------------------------
+   19. Split Screen Ledger
+   ---------------------------------------------------- */
+.ledger-split-layout {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.ledger-left-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.ledger-right-col {
+  flex: 1;
+  min-width: 0;
+  position: sticky;
+  top: 2rem;
+}
+
+@media (max-width: 768px) {
+  .ledger-split-layout {
+    flex-direction: column;
+  }
+  .ledger-right-col {
+    position: static;
+  }
+}
+
+.question-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border: 1px solid var(--border-gold);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  transition: var(--transition-smooth);
+}
+
+.question-list-item:hover {
+  background: rgba(193, 154, 107, 0.1);
+}
+
+.question-list-content {
+  flex: 1;
+  margin-right: 1rem;
+}
+
+.question-list-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  box-shadow: 0 0 10px var(--color-danger-glow);
 }
