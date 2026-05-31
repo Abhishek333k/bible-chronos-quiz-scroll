@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Host Command Center - Bible Chronos</title>
+  
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Shared UI Styles -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Admin Specific Styles -->
+  <style>
+    body {
+      display: block; /* Override flex centering from style.css */
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* Security Banner */
+    .security-banner {
+      background: linear-gradient(90deg, #991b1b 0%, #dc2626 50%, #991b1b 100%);
+      color: #ffffff;
+      text-align: center;
+      padding: 0.75rem;
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* Dashboard Grid Layout */
+    .dashboard-container {
+      max-width: 1400px;
+      margin: 3rem auto;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 2.5rem;
+      align-items: flex-start;
+    }
+
+    /* Panel Adjustments */
+    .admin-panel {
+      padding: 2rem;
+      background: rgba(15, 15, 20, 0.85);
+    }
+    
+    .panel-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      filter: drop-shadow(0 0 10px var(--color-gold-glow));
+    }
+
+    .form-group label {
+      margin-bottom: 0.25rem;
+    }
+    
+    .form-group input, 
+    .form-group select, 
+    .form-group textarea {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border-gold);
+      border-radius: 6px;
+      padding: 0.9rem;
+      color: var(--color-text-primary);
+      font-family: var(--font-sans);
+      width: 100%;
+      margin-bottom: 1rem;
+      transition: var(--transition-smooth);
+    }
+    
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-group input:focus, 
+    .form-group select:focus, 
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--color-gold);
+      box-shadow: 0 0 10px var(--color-gold-glow);
+    }
+
+    select option {
+      background: #0a0a0c;
+      color: #fff;
+    }
+
+    .btn-block {
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
+    /* Options Grid for Question Form */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .options-grid .form-group {
+      margin-bottom: 0;
+    }
+
+    /* Live Ops Switch Panel */
+    .switch-panel {
+      text-align: center;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .btn-start:hover {
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    .btn-end {
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .btn-end:hover {
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    }
+
+    .uuid-display-box {
+      font-family: monospace;
+      font-size: 1.1rem;
+      color: var(--color-gold-bright);
+      background: rgba(0, 0, 0, 0.8);
+      padding: 1rem;
+      border: 1px dashed var(--color-gold);
+      border-radius: 6px;
+      text-align: center;
+      margin: 1.5rem 0;
+      word-break: break-all;
+    }
+
+    hr.divider {
+      border: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border-gold), transparent);
+      margin: 2rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Cinematic Background -->
+  <div class="parchment-glow"></div>
+
+  <!-- Security Notice Banner -->
+  <div class="security-banner">
+    ⚠️ ADMINISTRATIVE COMMAND CENTER: Do not share this URL with participants. ⚠️
+  </div>
+
+  <div class="dashboard-container">
+    
+    <!-- PANEL 1: The Scriptorium (Quiz Manager) -->
+    <section class="card glassmorphism admin-panel">
+      <div class="panel-icon">✍️</div>
+      <h2 class="card-title">The Scriptorium</h2>
+      <p class="card-description">Create and manage your scrolls (quizzes).</p>
+      
+      <!-- Create Quiz Form -->
+      <form id="form-create-quiz">
+        <div class="form-group">
+          <label for="quiz-title">New Quiz Title</label>
+          <input type="text" id="quiz-title" required placeholder="E.g., The Exodus Journey">
+        </div>
+        <button type="submit" class="btn-primary btn-block">Create New Quiz</button>
+      </form>
+
+      <hr class="divider">
+
+      <!-- Add Question Form -->
+      <h3 class="card-title" style="font-size: 1.2rem; color: var(--color-gold);">Add Question to Quiz</h3>
+      <form id="form-add-question">
+        <div class="form-group">
+          <label for="select-quiz-add">Select Quiz</label>
+          <select id="select-quiz-add" required>
+            <option value="" disabled selected>Loading quizzes...</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="question-text">Question Text</label>
+          <textarea id="question-text" required placeholder="Enter the question..."></textarea>
+        </div>
+        
+        <label style="font-size: 0.85rem; color: var(--color-gold); font-weight: 600; margin-bottom: 0.5rem; display: block;">Options</label>
+        <div class="options-grid">
+          <div class="form-group">
+            <input type="text" id="opt-a" required placeholder="Option A">
+          </div>
+          <div class="form-group">
+            <input type="text" id="opt-b" required placeholder="Option B">
+          </div>
+          <div class="form-group">
+            <input type="text" id="opt-c" required placeholder="Option C">
+          </div>
+          <div class="form-group">
+            <input type="text" id="opt-d" required placeholder="Option D">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="correct-answer">Correct Answer</label>
+          <select id="correct-answer" required>
+            <option value="" disabled selected>Which option is correct?</option>
+            <option value="A">Option A</option>
+            <option value="B">Option B</option>
+            <option value="C">Option C</option>
+            <option value="D">Option D</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn-primary btn-block">Commit Question</button>
+      </form>
+    </section>
+
+    <!-- PANEL 2: Session Generator (The Gates) -->
+    <section class="card glassmorphism admin-panel">
+      <div class="panel-icon">🏛️</div>
+      <h2 class="card-title">Session Generator</h2>
+      <p class="card-description">Open the gates for a new group of participants.</p>
+
+      <form id="form-generate-session">
+        <div class="form-group">
+          <label for="select-quiz-session">Select Quiz</label>
+          <select id="select-quiz-session" required>
+            <option value="" disabled selected>Loading quizzes...</option>
+          </select>
+        </div>
+        
+        <button type="submit" class="btn-primary btn-block">Generate New Session</button>
+      </form>
+
+      <!-- Generated UUID Display -->
+      <div id="session-uuid-container" style="display: none; margin-top: 2rem;">
+        <p style="color: var(--color-text-secondary); font-size: 0.9rem; text-align: center;">Share this UUID with your participants:</p>
+        <div id="display-uuid" class="uuid-display-box"></div>
+        <button id="btn-copy-uuid" class="btn-secondary btn-block">Copy UUID to Clipboard</button>
+      </div>
+    </section>
+
+    <!-- PANEL 3: Live Operations (The Switch) -->
+    <section class="card glassmorphism admin-panel switch-panel">
+      <div class="panel-icon">⚙️</div>
+      <h2 class="card-title text-center">Live Operations</h2>
+      <p class="card-description text-center">Control the flow of time for the active session.</p>
+
+      <div class="form-group" style="text-align: left;">
+        <label for="live-session-uuid">Active Session UUID</label>
+        <input type="text" id="live-session-uuid" placeholder="Paste session UUID to control..." required>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
+        <button id="btn-start-exam" class="btn-primary btn-start btn-block">▶ START EXAM</button>
+        <button id="btn-end-exam" class="btn-primary btn-end btn-block">⏹ END EXAM & PUBLISH RESULTS</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Notification Toast for feedback -->
+  <div id="notification-toast" class="toast">
+    <span id="toast-message"></span>
+  </div>
+
+  <!-- External JS Logic -->
+  <script src="admin.js"></script>
+</body>
+</html>
