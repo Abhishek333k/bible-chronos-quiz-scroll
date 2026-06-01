@@ -1501,6 +1501,18 @@ input:checked + .toggle-slider:before {
   gap: 0.75rem;
   position: relative;
   overflow: hidden;
+  animation: cardFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .candidate-card:hover {
@@ -1536,6 +1548,40 @@ input:checked + .toggle-slider:before {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 75%;
+}
+
+.candidate-badges {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.candidate-status-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 20px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.candidate-status-badge.ok {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #a7f3d0;
+}
+
+.candidate-status-badge.warn {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+}
+
+.candidate-status-badge.dq {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
 }
 
 .candidate-flagged {

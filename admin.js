@@ -30,6 +30,19 @@ if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE
 }
 
 // ----------------------------------------------------
+// 1.5. Security Helpers
+// ----------------------------------------------------
+function escapeHTML(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ----------------------------------------------------
 // 2. DOM Elements Cache
 // ----------------------------------------------------
 
@@ -1139,6 +1152,10 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
     card = document.createElement("div");
     card.id = `candidate-card-${data.guestId}`;
     card.className = "candidate-card glassmorphism";
+  }
+
+  // Ensure card is in the correct active grid container (moves it between main page and modal if needed)
+  if (card.parentElement !== grid) {
     grid.appendChild(card);
   }
 
@@ -1147,11 +1164,27 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
   const flagged = data.flagged || 0;
   const currentScore = data.currentScore || 0;
   const progressPercent = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const violationCount = data.violationCount || 0;
+  const isDisqualified = data.isDisqualified || false;
+
+  let statusBadge = '';
+  if (isDisqualified) {
+    statusBadge = `<span class="candidate-status-badge dq">DQ</span>`;
+  } else if (violationCount > 0) {
+    statusBadge = `<span class="candidate-status-badge warn">${violationCount} Violations</span>`;
+  } else {
+    statusBadge = `<span class="candidate-status-badge ok">Active</span>`;
+  }
+
+  const escapedName = escapeHTML(data.name || 'Anonymous');
 
   card.innerHTML = `
     <div class="candidate-header">
-      <span class="candidate-name" title="${data.name || 'Anonymous'}">${data.name || 'Anonymous'}</span>
-      <span class="candidate-flagged">🚩 ${flagged}</span>
+      <span class="candidate-name" title="${escapedName}">${escapedName}</span>
+      <div class="candidate-badges">
+        ${statusBadge}
+        <span class="candidate-flagged">🚩 ${flagged}</span>
+      </div>
     </div>
     <div class="candidate-progress-label">
       <span>Progress</span>

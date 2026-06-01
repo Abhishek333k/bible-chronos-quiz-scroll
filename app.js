@@ -52,6 +52,19 @@ window.addEventListener('orientationchange', setDynamicViewportHeight);
 setDynamicViewportHeight();
 
 // ----------------------------------------------------
+// 1.6. Security Helpers
+// ----------------------------------------------------
+function escapeHTML(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ----------------------------------------------------
 // 2. Application State Variables
 // ----------------------------------------------------
 let state = {
@@ -616,8 +629,18 @@ function sendTelemetry() {
     let currentScore = 0;
     Object.keys(state.userAnswers).forEach(qId => {
       const q = state.questions.find(x => x.id === qId);
-      if (q && q.correct_index === state.userAnswers[qId]) {
-        currentScore++;
+      if (q) {
+        let isCorrect = false;
+        if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
+          isCorrect = (String(q.correct_index) === String(state.userAnswers[qId]));
+        } else if (q.correct_option) {
+          const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+          const selectedText = originalOptions[state.userAnswers[qId]];
+          isCorrect = (selectedText && selectedText.trim().toLowerCase() === q.correct_option.trim().toLowerCase());
+        }
+        if (isCorrect) {
+          currentScore++;
+        }
       }
     });
 
@@ -630,7 +653,9 @@ function sendTelemetry() {
         answered: Object.keys(state.userAnswers).length,
         total: state.questions.length,
         flagged: Object.keys(state.reviewFlags).length,
-        currentScore: currentScore
+        currentScore: currentScore,
+        violationCount: state.violationCount,
+        isDisqualified: state.isDisqualified
       }
     });
   }
@@ -1101,7 +1126,12 @@ async function submitQuiz(isForcedCheater = false) {
         }
         isCorrectValue = false;
       } else {
-        isCorrectValue = (selectedIndex === q.correct_index);
+        if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
+          isCorrectValue = (String(selectedIndex) === String(q.correct_index));
+        } else if (q.correct_option) {
+          const selectedText = originalOptions[selectedIndex];
+          isCorrectValue = (selectedText && selectedText.trim().toLowerCase() === q.correct_option.trim().toLowerCase());
+        }
       }
 
       return {
@@ -1239,7 +1269,7 @@ async function loadLeaderboardData() {
 
       tr.innerHTML = `
         <td class="text-center">${rankText}</td>
-        <td><strong>${player.name}</strong> ${isMe ? "(You)" : ""}</td>
+        <td><strong>${escapeHTML(player.name)}</strong> ${isMe ? "(You)" : ""}</td>
         <td class="text-center">${player.correctCount}/${player.totalCount}</td>
         <td class="text-center font-mono">${formatTime(player.timeTakenMs)}</td>
         <td>${statusString}</td>
