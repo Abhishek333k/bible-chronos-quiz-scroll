@@ -65,6 +65,53 @@ function escapeHTML(str) {
 }
 
 // ----------------------------------------------------
+// 1.7. Grading and State Helpers
+// ----------------------------------------------------
+function getSelectedOptionIndex(q, answer) {
+  if (answer === undefined || answer === null || answer === '') return -1;
+  const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+  const index = parseInt(answer, 10);
+  if (!isNaN(index) && index >= 0 && index < originalOptions.length) {
+    return index;
+  }
+  const text = String(answer).trim().toLowerCase();
+  return originalOptions.findIndex(opt => opt && opt.trim().toLowerCase() === text);
+}
+
+function getSelectedOptionText(q, answer) {
+  if (answer === undefined || answer === null || answer === '') return null;
+  const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+  const index = parseInt(answer, 10);
+  if (!isNaN(index) && index >= 0 && index < originalOptions.length) {
+    return originalOptions[index];
+  }
+  return String(answer);
+}
+
+function getCorrectOptionIndex(q) {
+  if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
+    return parseInt(q.correct_index, 10);
+  }
+  if (q.correct_option) {
+    const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+    const text = String(q.correct_option).trim().toLowerCase();
+    return originalOptions.findIndex(opt => opt && opt.trim().toLowerCase() === text);
+  }
+  return -1;
+}
+
+function getCorrectOptionText(q) {
+  const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+  if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
+    const idx = parseInt(q.correct_index, 10);
+    if (idx >= 0 && idx < originalOptions.length) {
+      return originalOptions[idx];
+    }
+  }
+  return q.correct_option || null;
+}
+
+// ----------------------------------------------------
 // 2. Application State Variables
 // ----------------------------------------------------
 let state = {
@@ -267,11 +314,11 @@ function renderBooklet() {
   if (!state.questions || state.questions.length === 0) return;
   
   state.questions.forEach((q, idx) => {
-    let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
-    const userChoiceIndex = state.userAnswers[q.id];
-    const userChoice = userChoiceIndex !== undefined ? originalOptions[userChoiceIndex] : "No Answer Selected";
-    const correctChoice = originalOptions[q.correct_index];
-    const isCorrect = userChoiceIndex === q.correct_index;
+    const userChoiceIndex = getSelectedOptionIndex(q, state.userAnswers[q.id]);
+    const userChoice = userChoiceIndex !== -1 ? getSelectedOptionText(q, state.userAnswers[q.id]) : "No Answer Selected";
+    const correctChoice = getCorrectOptionText(q) || "N/A";
+    const correctChoiceIndex = getCorrectOptionIndex(q);
+    const isCorrect = userChoiceIndex !== -1 && userChoiceIndex === correctChoiceIndex;
     
     const block = document.createElement('div');
     block.className = 'booklet-card card glassmorphism';
@@ -630,14 +677,18 @@ function sendTelemetry() {
     Object.keys(state.userAnswers).forEach(qId => {
       const q = state.questions.find(x => x.id === qId);
       if (q) {
+        const userChoiceIndex = getSelectedOptionIndex(q, state.userAnswers[qId]);
+        const userChoiceText = getSelectedOptionText(q, state.userAnswers[qId]);
+        const correctChoiceIndex = getCorrectOptionIndex(q);
+        const correctChoiceText = getCorrectOptionText(q);
+
         let isCorrect = false;
-        if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
-          isCorrect = (String(q.correct_index) === String(state.userAnswers[qId]));
-        } else if (q.correct_option) {
-          const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
-          const selectedText = originalOptions[state.userAnswers[qId]];
-          isCorrect = (selectedText && selectedText.trim().toLowerCase() === q.correct_option.trim().toLowerCase());
+        if (correctChoiceIndex !== -1) {
+          isCorrect = (userChoiceIndex === correctChoiceIndex);
+        } else if (correctChoiceText) {
+          isCorrect = (userChoiceText && userChoiceText.trim().toLowerCase() === correctChoiceText.trim().toLowerCase());
         }
+
         if (isCorrect) {
           currentScore++;
         }
@@ -703,7 +754,7 @@ function initializeQuizUI() {
         btn.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
         btn.querySelector(".option-text-content").textContent = optText;
         
-        if (state.userAnswers[q.id] === origIdx) {
+        if (getSelectedOptionIndex(q, state.userAnswers[q.id]) === origIdx) {
           btn.classList.add("selected");
         }
         
@@ -902,7 +953,7 @@ function renderQuestionPaged() {
     button.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
     button.querySelector(".option-text-content").textContent = optText;
     
-    if (state.userAnswers[currentQuestion.id] === origIdx) {
+    if (getSelectedOptionIndex(currentQuestion, state.userAnswers[currentQuestion.id]) === origIdx) {
       button.classList.add("selected");
     }
     
@@ -1112,25 +1163,27 @@ async function submitQuiz(isForcedCheater = false) {
 
   try {
     const responsesToInsert = state.questions.map(q => {
-      const selectedIndex = state.userAnswers[q.id];
-      let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+      const selectedVal = state.userAnswers[q.id];
+      const selectedIndex = getSelectedOptionIndex(q, selectedVal);
+      const selectedText = getSelectedOptionText(q, selectedVal);
+      const correctChoiceIndex = getCorrectOptionIndex(q);
+      const correctChoiceText = getCorrectOptionText(q);
       
       // If cheater and did not answer this question yet, or if they tabbed out completely
-      let selectedOptionToSave = selectedIndex !== undefined ? originalOptions[selectedIndex] : "NO_RESPONSE";
+      let selectedOptionToSave = selectedText || "NO_RESPONSE";
       let isCorrectValue = false;
 
       if (isForcedCheater) {
         // Flag remaining answers with a special DQ string
-        if (selectedIndex === undefined) {
+        if (selectedVal === undefined) {
           selectedOptionToSave = "AUTO_SUBMIT_DQ";
         }
         isCorrectValue = false;
       } else {
-        if (q.correct_index !== null && q.correct_index !== undefined && q.correct_index !== '') {
-          isCorrectValue = (String(selectedIndex) === String(q.correct_index));
-        } else if (q.correct_option) {
-          const selectedText = originalOptions[selectedIndex];
-          isCorrectValue = (selectedText && selectedText.trim().toLowerCase() === q.correct_option.trim().toLowerCase());
+        if (correctChoiceIndex !== -1) {
+          isCorrectValue = (selectedIndex === correctChoiceIndex);
+        } else if (correctChoiceText) {
+          isCorrectValue = (selectedText && selectedText.trim().toLowerCase() === correctChoiceText.trim().toLowerCase());
         }
       }
 
