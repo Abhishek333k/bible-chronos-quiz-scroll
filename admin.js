@@ -14,11 +14,7 @@ let supabaseClient = null;
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
   if (typeof window !== "undefined" && window.supabase) {
     try {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-          persistSession: false
-        }
-      });
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     } catch (e) {
       console.error("Failed to initialize Supabase client:", e);
     }
@@ -1287,6 +1283,34 @@ function initializeAdminUI() {
       // Resubscribe to the main grid if a PIN is entered there
       if (el.liveSessionPin && el.liveSessionPin.value.trim()) {
         syncTelemetrySubscription(el.liveSessionPin.value.trim());
+      }
+    });
+  }
+
+  // Logout Button Event Listener
+  const btnLogout = document.getElementById("btn-admin-logout");
+  if (btnLogout) {
+    btnLogout.addEventListener("click", async () => {
+      try {
+        await supabaseClient.auth.signOut();
+        
+        // Hide secure dashboard wrapper
+        const secureWrapper = document.getElementById('secure-dashboard-wrapper');
+        if (secureWrapper) secureWrapper.style.display = 'none';
+        
+        // Show login container
+        const loginContainer = document.getElementById('admin-login-container');
+        if (loginContainer) loginContainer.style.display = 'block';
+        
+        // Clear login form inputs
+        const emailInput = document.getElementById('admin-email');
+        const passwordInput = document.getElementById('admin-password');
+        if (emailInput) emailInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+        
+        showToast("Logged out successfully.");
+      } catch (err) {
+        showToast("Logout failed: " + err.message);
       }
     });
   }

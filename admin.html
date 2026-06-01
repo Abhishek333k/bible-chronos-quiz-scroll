@@ -49,14 +49,23 @@
     }
 
     /* Tab Navigation */
-    .admin-tabs {
+    .admin-nav {
       display: flex;
-      gap: 1rem;
+      justify-content: space-between;
+      align-items: center;
       margin: 2rem auto;
       max-width: 1000px;
-      justify-content: center;
-      flex-wrap: wrap;
       padding: 0 1rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .nav-tabs {
+      display: flex;
+      gap: 1rem;
+      flex: 1;
+      flex-wrap: wrap;
+      justify-content: flex-start;
     }
     
     .tab-btn {
@@ -242,11 +251,14 @@
   <!-- Hidden Secure Dashboard Wrapper -->
   <div id="secure-dashboard-wrapper" style="display: none;">
     <!-- Tab Navigation -->
-    <nav class="admin-tabs" id="admin-tabs">
-      <button class="tab-btn active" data-target="tab-scriptorium">✍️ The Scriptorium</button>
-      <button class="tab-btn" data-target="tab-deploy">🏛️ Deploy Session</button>
-      <button class="tab-btn" data-target="tab-live">⚙️ Live Operations</button>
-      <button class="tab-btn" data-target="tab-ledger">📚 Ledger</button>
+    <nav class="admin-nav" id="admin-tabs">
+      <div class="nav-tabs">
+        <button class="tab-btn active" data-target="tab-scriptorium">✍️ The Scriptorium</button>
+        <button class="tab-btn" data-target="tab-deploy">🏛️ Deploy Session</button>
+        <button class="tab-btn" data-target="tab-live">⚙️ Live Operations</button>
+        <button class="tab-btn" data-target="tab-ledger">📚 Ledger</button>
+      </div>
+      <button id="btn-admin-logout" class="btn-secondary" style="border-color: var(--color-danger); color: var(--color-danger); padding: 0.4rem 1rem; font-size: 0.9rem;">🚪 Log Out</button>
     </nav>
 
     <div class="dashboard-container">
