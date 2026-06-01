@@ -286,20 +286,9 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
     el.questionText.value = '';
     el.optA.value = ''; el.optB.value = ''; el.optC.value = ''; el.optD.value = '';
     el.correctAnswer.value = '';
-    const imgInput = document.getElementById('q-image');
-    if (imgInput) imgInput.value = '';
-    
-    // Form Resetting for Add Preview
-    const addPreviewWrapper = document.getElementById('add-preview-wrapper');
-    const addPreviewImg = document.getElementById('add-preview-img');
-    if (addPreviewWrapper) addPreviewWrapper.classList.add("hidden");
-    if (addPreviewImg) {
-      if (addPreviewImg.dataset.objectUrl) {
-        URL.revokeObjectURL(addPreviewImg.dataset.objectUrl);
-        delete addPreviewImg.dataset.objectUrl;
-      }
-      addPreviewImg.src = "";
-    }
+    document.getElementById('add-preview-wrapper').classList.add('hidden');
+    document.getElementById('add-preview-img').src = '';
+    document.getElementById('q-image').value = '';
   } catch (err) {
     showToast("Failed to add question: " + err.message);
   }
@@ -379,7 +368,7 @@ el.formImportCsv.addEventListener('submit', async (e) => {
           quiz_id: quizId,
           question_text: cols[qIdx],
           options: optionsArr,
-          correct_index: correctIndex,
+          correct_index: Number(correctIndex),
           correct_option: optionsArr[correctIndex]
         });
       }
@@ -579,11 +568,12 @@ async function generatePrivateLeaderboard(pin) {
       const timeSec = (player.timeTakenMs / 1000).toFixed(1);
       tr.innerHTML = `
         <td style="padding: 0.5rem;">${idx + 1}</td>
-        <td style="padding: 0.5rem;"><strong>${player.name}</strong></td>
+        <td style="padding: 0.5rem;"><strong class="player-name-val"></strong></td>
         <td style="padding: 0.5rem;">${player.correctCount}/${player.totalCount}</td>
         <td style="padding: 0.5rem; font-family: monospace;">${timeSec}s</td>
         <td style="padding: 0.5rem;">${status}</td>
       `;
+      tr.querySelector('.player-name-val').textContent = player.name;
       el.privateLeaderboardTbody.appendChild(tr);
     });
   } catch (err) {
@@ -817,7 +807,17 @@ window.openQuestionEditor = function(questionData) {
   el.editOptC.value = opts[2] || "";
   el.editOptD.value = opts[3] || "";
   
-  el.editQCorrect.value = questionData.correct_option;
+  let selectIndex = "";
+  if (questionData.correct_index !== null && questionData.correct_index !== undefined && questionData.correct_index !== "") {
+    selectIndex = String(questionData.correct_index);
+  } else if (questionData.correct_option) {
+    const text = String(questionData.correct_option).trim().toLowerCase();
+    const idx = opts.findIndex(opt => opt && opt.trim().toLowerCase() === text);
+    if (idx !== -1) {
+      selectIndex = String(idx);
+    }
+  }
+  el.editQCorrect.value = selectIndex;
   
   // Edit Modal Hydration for Image Preview
   const editPreviewWrapper = document.getElementById('edit-preview-wrapper');
@@ -933,18 +933,9 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
     }
     
     el.editQuestionContainer.classList.add("hidden");
-    const editPreviewWrapper = document.getElementById('edit-preview-wrapper');
-    const editPreviewImg = document.getElementById('edit-preview-img');
-    const editImageInput = document.getElementById('edit-q-image');
-    if (editPreviewWrapper) editPreviewWrapper.classList.add("hidden");
-    if (editPreviewImg) {
-      if (editPreviewImg.dataset.objectUrl) {
-        URL.revokeObjectURL(editPreviewImg.dataset.objectUrl);
-        delete editPreviewImg.dataset.objectUrl;
-      }
-      editPreviewImg.src = '';
-    }
-    if (editImageInput) editImageInput.value = '';
+    document.getElementById('edit-preview-wrapper').classList.add('hidden');
+    document.getElementById('edit-preview-img').src = '';
+    document.getElementById('edit-q-image').value = '';
     
     // Refresh the questions list
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));

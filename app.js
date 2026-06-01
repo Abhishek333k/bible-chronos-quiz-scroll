@@ -456,7 +456,12 @@ el.authForm.addEventListener("submit", async (e) => {
     // Ensure Guest ID exists
     let guestId = sessionStorage.getItem("guest_id");
     if (!guestId) {
-      guestId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'guest-' + Date.now() + Math.floor(Math.random()*1000);
+      guestId = window.crypto && window.crypto.randomUUID 
+        ? window.crypto.randomUUID() 
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
       sessionStorage.setItem("guest_id", guestId);
     }
 
@@ -522,7 +527,12 @@ function subscribeToSession() {
         evaluateSessionStatus(effectiveStatus);
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log(`Session realtime status: ${status}`);
+      if (status === "SUBSCRIBED") {
+        sendTelemetry();
+      }
+    });
 }
 
 function evaluateSessionStatus(status) {
