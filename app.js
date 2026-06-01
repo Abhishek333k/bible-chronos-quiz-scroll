@@ -474,7 +474,7 @@ el.authForm.addEventListener("submit", async (e) => {
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
     state.isJumbled = session.is_jumbled === false ? false : true;
     state.displayMode = session.display_mode || 'paged';
-    state.isAntiCheatEnabled = session.is_anti_cheat_enabled !== false;
+    state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
 
     // Setup UI summary
     el.summaryName.textContent = name;
@@ -1403,7 +1403,7 @@ function restoreSavedSession() {
       state.questions = saved.questions;
       state.isJumbled = saved.isJumbled !== undefined ? saved.isJumbled : true;
       state.displayMode = saved.displayMode || 'paged';
-      state.isAntiCheatEnabled = saved.isAntiCheatEnabled !== false;
+      state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
       
       // Update UI summary
       el.summaryName.textContent = state.name;
