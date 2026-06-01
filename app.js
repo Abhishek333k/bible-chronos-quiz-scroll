@@ -490,32 +490,68 @@ el.authForm.addEventListener("submit", async (e) => {
       initialStatus = 'evaluation';
     }
 
-    if (initialStatus === 'completed') {
-      const { data: existingResponse } = await supabaseClient
+    if (initialStatus === 'completed' || initialStatus === 'evaluation') {
+      // 1. Check if user exists using their current guestId
+      let { data: existingResponse } = await supabaseClient
         .from('user_responses')
-        .select('id')
+        .select('participant_guest_id, participant_name, participant_email')
         .eq('session_id', session.id)
         .eq('participant_guest_id', guestId)
         .limit(1);
 
+      // 2. Fallback: match by name and optional email if guestId search was empty
+      if (!existingResponse || existingResponse.length === 0) {
+        let nameAndEmailQuery = supabaseClient
+          .from('user_responses')
+          .select('participant_guest_id, participant_name, participant_email')
+          .eq('session_id', session.id)
+          .ilike('participant_name', name);
+        
+        if (email) {
+          nameAndEmailQuery = nameAndEmailQuery.eq('participant_email', email);
+        } else {
+          nameAndEmailQuery = nameAndEmailQuery.is('participant_email', null);
+        }
+
+        const { data: fallbackResponse } = await nameAndEmailQuery.limit(1);
+        if (fallbackResponse && fallbackResponse.length > 0) {
+          existingResponse = fallbackResponse;
+          // Restore/Sync the guestId!
+          guestId = fallbackResponse[0].participant_guest_id;
+          sessionStorage.setItem("guest_id", guestId);
+          state.guestId = guestId;
+          
+          state.name = fallbackResponse[0].participant_name;
+          state.email = fallbackResponse[0].participant_email || "";
+          el.summaryName.textContent = state.name;
+        }
+      }
+
       if (existingResponse && existingResponse.length > 0) {
         subscribeToSession();
-        await loadLeaderboardData();
-        showView("view-results");
+        if (initialStatus === 'completed') {
+          await loadLeaderboardData();
+          showView("view-results");
+        } else {
+          // evaluation status
+          showView("view-lock");
+          const lockTitle = el.viewLock.querySelector('.card-title');
+          const lockDesc = el.viewLock.querySelector('.card-description');
+          if (lockTitle) lockTitle.textContent = "Exam Halted for Evaluation";
+          if (lockDesc) lockDesc.textContent = "Exam Halted. Proctors are currently evaluating the results. Please wait.";
+        }
         return;
       } else {
-        showToast("⚠️ This session has already ended. Ask your host to open a new session.");
+        // Block new user joining finished / halted sessions
+        if (initialStatus === 'completed') {
+          showToast("⚠️ This session has already ended. Ask your host to open a new session.");
+        } else {
+          showToast("⚠️ This session is currently under evaluation. Please wait for the host.");
+        }
         submitBtn.disabled = false;
         submitBtn.textContent = "Join Session";
         return;
       }
-    }
-
-    if (initialStatus === 'evaluation') {
-      showToast("⚠️ This session is currently under evaluation. Please wait for the host.");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Join Session";
-      return;
     }
 
     evaluateSessionStatus(initialStatus);
