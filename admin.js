@@ -513,12 +513,32 @@ async function generatePrivateLeaderboard(pin) {
       
     if (sessionError || !sessionData) return;
 
-    const { data: responses, error: respError } = await supabaseClient
-      .from('user_responses')
-      .select('*')
-      .eq('session_id', sessionData.id);
+    let responses = [];
+    let from = 0;
+    const pageSize = 1000;
+    let hasMore = true;
 
-    if (respError || !responses) return;
+    while (hasMore) {
+      const to = from + pageSize - 1;
+      const { data, error: respError } = await supabaseClient
+        .from('user_responses')
+        .select('*')
+        .eq('session_id', sessionData.id)
+        .range(from, to);
+
+      if (respError) return;
+
+      if (data && data.length > 0) {
+        responses = responses.concat(data);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
 
     const userGroups = {};
     responses.forEach(r => {
@@ -591,12 +611,32 @@ el.btnExportCsv.addEventListener('click', async () => {
       
     if (sessionError || !sessionData) throw new Error("Could not find session by PIN.");
 
-    const { data: responses, error: respError } = await supabaseClient
-      .from('user_responses')
-      .select('*')
-      .eq('session_id', sessionData.id);
+    let responses = [];
+    let from = 0;
+    const pageSize = 1000;
+    let hasMore = true;
 
-    if (respError) throw respError;
+    while (hasMore) {
+      const to = from + pageSize - 1;
+      const { data, error: respError } = await supabaseClient
+        .from('user_responses')
+        .select('*')
+        .eq('session_id', sessionData.id)
+        .range(from, to);
+
+      if (respError) throw respError;
+
+      if (data && data.length > 0) {
+        responses = responses.concat(data);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
 
     if (!responses || responses.length === 0) {
       return showToast("No responses found for this session.");

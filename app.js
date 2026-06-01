@@ -1297,15 +1297,40 @@ async function submitQuiz(isForcedCheater = false) {
   }
 }
 
-async function loadLeaderboardData() {
-  try {
-    // 1. Fetch all user responses recorded for this specific session
-    const { data: responses, error } = await supabaseClient
+async function fetchSessionResponses(sessionId) {
+  let responses = [];
+  let from = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseClient
       .from("user_responses")
       .select("participant_name, participant_email, participant_guest_id, is_correct, time_taken_ms, selected_option, question_id")
-      .eq("session_id", state.sessionId);
+      .eq("session_id", sessionId)
+      .range(from, to);
 
     if (error) throw error;
+
+    if (data && data.length > 0) {
+      responses = responses.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return responses;
+}
+
+async function loadLeaderboardData() {
+  try {
+    // 1. Fetch all user responses recorded for this specific session using pagination
+    const responses = await fetchSessionResponses(state.sessionId);
 
     // 2. Aggregate metrics on client-side
     // Group records by unique guest ID or name+email combo
