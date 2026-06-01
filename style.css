@@ -814,14 +814,6 @@ body::after {
   font-size: 1.05rem;
 }
 
-.option-letter {
-  font-family: var(--font-serif);
-  font-weight: 700;
-  color: var(--color-gold);
-  margin-right: 1rem;
-  font-size: 1.05rem;
-}
-
 /* ----------------------------------------------------
    12. View 5: Submission Lock
    ---------------------------------------------------- */

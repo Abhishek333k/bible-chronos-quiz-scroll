@@ -1068,21 +1068,22 @@ async function loadLeaderboardData() {
     // 1. Fetch all user responses recorded for this specific session
     const { data: responses, error } = await supabaseClient
       .from("user_responses")
-      .select("participant_name, participant_email, is_correct, time_taken_ms, selected_option")
+      .select("participant_name, participant_email, participant_guest_id, is_correct, time_taken_ms, selected_option")
       .eq("session_id", state.sessionId);
 
     if (error) throw error;
 
     // 2. Aggregate metrics on client-side
-    // Group records by email (unique ID)
+    // Group records by unique guest ID or name+email combo
     const userGroups = {};
 
     responses.forEach(r => {
-      const key = r.participant_email;
+      const key = r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
       if (!userGroups[key]) {
         userGroups[key] = {
           name: r.participant_name,
           email: r.participant_email,
+          guestId: r.participant_guest_id,
           correctCount: 0,
           totalCount: 0,
           timeTakenMs: r.time_taken_ms,
@@ -1117,7 +1118,7 @@ async function loadLeaderboardData() {
     });
 
     // 3. Render Personal metrics
-    const currentUserKey = state.email;
+    const currentUserKey = state.guestId || state.email || (state.name + "_" + (state.email || "guest"));
     const currentUserData = userGroups[currentUserKey];
 
     if (currentUserData) {
@@ -1138,7 +1139,9 @@ async function loadLeaderboardData() {
       const tr = document.createElement("tr");
       
       // Highlight current user
-      if (player.email === state.email) {
+      const isMe = (player.guestId && player.guestId === state.guestId) || 
+                   (!player.guestId && player.name === state.name && player.email === state.email);
+      if (isMe) {
         tr.className = "user-row";
       }
 
@@ -1158,7 +1161,7 @@ async function loadLeaderboardData() {
 
       tr.innerHTML = `
         <td class="text-center">${rankText}</td>
-        <td><strong>${player.name}</strong> ${player.email === state.email ? "(You)" : ""}</td>
+        <td><strong>${player.name}</strong> ${isMe ? "(You)" : ""}</td>
         <td class="text-center">${player.correctCount}/${player.totalCount}</td>
         <td class="text-center font-mono">${formatTime(player.timeTakenMs)}</td>
         <td>${statusString}</td>

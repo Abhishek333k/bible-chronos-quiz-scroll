@@ -137,12 +137,15 @@ async function loadQuizzes() {
       quizItem.style.padding = '0.75rem';
       quizItem.style.borderRadius = '6px';
       quizItem.innerHTML = `
-        <span style="font-weight: 600; font-family: var(--font-sans);">${quiz.title}</span>
+        <span style="font-weight: 600; font-family: var(--font-sans);" class="quiz-title-text"></span>
         <div style="display: flex; gap: 0.5rem;">
-          <button class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-color: var(--color-gold); color: var(--color-gold);" onclick="backupQuiz('${quiz.id}', '${quiz.title.replace(/'/g, "\\'")}')">💾 Backup</button>
-          <button class="btn-primary" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteQuiz('${quiz.id}', '${quiz.title.replace(/'/g, "\\'")}')">Delete</button>
+          <button class="btn-secondary btn-backup" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-color: var(--color-gold); color: var(--color-gold);">💾 Backup</button>
+          <button class="btn-primary btn-delete" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 0.4rem 0.8rem; font-size: 0.8rem;">Delete</button>
         </div>
       `;
+      quizItem.querySelector('.quiz-title-text').textContent = quiz.title;
+      quizItem.querySelector('.btn-backup').addEventListener('click', () => backupQuiz(quiz.id, quiz.title));
+      quizItem.querySelector('.btn-delete').addEventListener('click', () => deleteQuiz(quiz.id, quiz.title));
       el.ledgerQuizList.appendChild(quizItem);
     });
 
@@ -535,14 +538,18 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
         qItem.className = 'question-list-item';
         qItem.innerHTML = `
           <div class="question-list-content">
-            <div style="font-weight: 600; margin-bottom: 0.25rem;">Q${index + 1}: ${q.question_text}</div>
-            <div style="font-size: 0.8rem; color: var(--color-text-secondary);">Correct: ${q.correct_option}</div>
+            <div style="font-weight: 600; margin-bottom: 0.25rem;" class="q-text-label"></div>
+            <div style="font-size: 0.8rem; color: var(--color-text-secondary);" class="q-correct-label"></div>
           </div>
           <div class="question-list-actions">
-            <button class="btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick='openQuestionEditor(${JSON.stringify(q).replace(/'/g, "&apos;")})'>Edit</button>
-            <button class="btn-danger" onclick='deleteQuestion("${q.id}")'>Delete</button>
+            <button class="btn-secondary btn-edit" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">Edit</button>
+            <button class="btn-danger btn-delete">Delete</button>
           </div>
         `;
+        qItem.querySelector('.q-text-label').textContent = `Q${index + 1}: ${q.question_text}`;
+        qItem.querySelector('.q-correct-label').textContent = `Correct: ${q.correct_option}`;
+        qItem.querySelector('.btn-edit').addEventListener('click', () => openQuestionEditor(q));
+        qItem.querySelector('.btn-delete').addEventListener('click', () => deleteQuestion(q.id));
         el.ledgerQuestionsList.appendChild(qItem);
       });
     }
@@ -652,7 +659,7 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
 // ----------------------------------------------------
 // 10. Fleet Monitor Logic
 // ----------------------------------------------------
-let activeSessionsTimers = {};
+let activeSessionItems = {}; // { sessionId: { element, intervalId } }
 
 async function loadActiveSessions() {
   if (!supabaseClient) return;
@@ -669,53 +676,93 @@ async function loadActiveSessions() {
     if (error) throw error;
 
     if (!sessions || sessions.length === 0) {
+      // Clear all existing timers
+      Object.keys(activeSessionItems).forEach(id => {
+        if (activeSessionItems[id].intervalId) clearInterval(activeSessionItems[id].intervalId);
+        activeSessionItems[id].element.remove();
+      });
+      activeSessionItems = {};
       listEl.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.9rem;">No active sessions currently running.</span>';
       return;
     }
 
-    let html = '';
+    // Remove placeholder if present
+    const placeholder = listEl.querySelector('span');
+    if (placeholder && placeholder.textContent.includes("No active sessions")) {
+      listEl.innerHTML = '';
+    }
+
+    const currentSessionIds = new Set(sessions.map(s => s.id));
+
+    // Remove stale sessions
+    Object.keys(activeSessionItems).forEach(id => {
+      if (!currentSessionIds.has(id)) {
+        if (activeSessionItems[id].intervalId) clearInterval(activeSessionItems[id].intervalId);
+        activeSessionItems[id].element.remove();
+        delete activeSessionItems[id];
+      }
+    });
+
+    // Add or update sessions
     sessions.forEach(session => {
+      if (activeSessionItems[session.id]) {
+        // Already exists, let the interval run smoothly
+        return;
+      }
+
       const quizTitle = session.quizzes ? session.quizzes.title : 'Unknown Quiz';
-      const cleanTitle = quizTitle.replace(/'/g, "\\'");
-      html += `
-        <div style="background: rgba(0,0,0,0.4); padding: 0.75rem 1rem; border-radius: 6px; border-left: 3px solid #10b981; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 0.2rem;">${quizTitle}</div>
-            <div style="font-family: monospace; font-size: 1.1rem; color: var(--color-gold-bright); letter-spacing: 2px;">PIN: ${session.access_pin}</div>
+      
+      const sessionItem = document.createElement('div');
+      sessionItem.style.background = 'rgba(0,0,0,0.4)';
+      sessionItem.style.padding = '0.75rem 1rem';
+      sessionItem.style.borderRadius = '6px';
+      sessionItem.style.borderLeft = '3px solid #10b981';
+      sessionItem.style.display = 'flex';
+      sessionItem.style.justifyContent = 'space-between';
+      sessionItem.style.alignItems = 'center';
+      sessionItem.style.marginBottom = '0.75rem';
+      
+      sessionItem.innerHTML = `
+        <div>
+          <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 0.2rem;" class="quiz-title-label"></div>
+          <div style="font-family: monospace; font-size: 1.1rem; color: var(--color-gold-bright); letter-spacing: 2px;">PIN: ${session.access_pin}</div>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <div style="text-align: right;">
+            <div style="font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase;">Elapsed Time</div>
+            <div id="monitor-timer-${session.id}" style="font-family: monospace; font-size: 1.3rem; font-weight: bold; color: #10b981; text-shadow: 0 0 8px rgba(16,185,129,0.4);">00:00</div>
           </div>
-          <div style="display: flex; gap: 1rem; align-items: center;">
-            <div style="text-align: right;">
-              <div style="font-size: 0.7rem; color: var(--color-text-secondary); text-transform: uppercase;">Elapsed Time</div>
-              <div id="monitor-timer-${session.id}" style="font-family: monospace; font-size: 1.3rem; font-weight: bold; color: #10b981; text-shadow: 0 0 8px rgba(16,185,129,0.4);">00:00</div>
-            </div>
-            <button class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: var(--color-gold); color: var(--color-gold);" onclick="openTelemetryModal('${session.access_pin}', '${cleanTitle}')">👁️ Monitor</button>
-          </div>
+          <button class="btn-secondary btn-monitor" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: var(--color-gold); color: var(--color-gold);">👁️ Monitor</button>
         </div>
       `;
-    });
-    
-    // Only update innerHTML if it has structurally changed to avoid resetting timers if possible
-    // For simplicity, we just overwrite and restart intervals, but a better way is to update DOM delta.
-    listEl.innerHTML = html;
-
-    // Clear old intervals
-    Object.values(activeSessionsTimers).forEach(clearInterval);
-    activeSessionsTimers = {};
-
-    // Start local ticking
-    sessions.forEach(session => {
-      if (!session.started_at) return;
-      const startTime = new Date(session.started_at).getTime();
-      const elTimer = document.getElementById(`monitor-timer-${session.id}`);
       
-      activeSessionsTimers[session.id] = setInterval(() => {
-        const deltaMs = Date.now() - startTime;
-        if (deltaMs < 0) return;
-        const totalSeconds = Math.floor(deltaMs / 1000);
-        const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-        const secs = String(totalSeconds % 60).padStart(2, '0');
-        if (elTimer) elTimer.textContent = `${mins}:${secs}`;
-      }, 1000);
+      sessionItem.querySelector('.quiz-title-label').textContent = quizTitle;
+      sessionItem.querySelector('.btn-monitor').addEventListener('click', () => openTelemetryModal(session.access_pin, quizTitle));
+      
+      listEl.appendChild(sessionItem);
+
+      // Start local ticking
+      let intervalId = null;
+      if (session.started_at) {
+        const startTime = new Date(session.started_at).getTime();
+        const elTimer = sessionItem.querySelector(`#monitor-timer-${session.id}`);
+        
+        const tick = () => {
+          const deltaMs = Date.now() - startTime;
+          if (deltaMs < 0) return;
+          const totalSeconds = Math.floor(deltaMs / 1000);
+          const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+          const secs = String(totalSeconds % 60).padStart(2, '0');
+          if (elTimer) elTimer.textContent = `${mins}:${secs}`;
+        };
+        tick();
+        intervalId = setInterval(tick, 1000);
+      }
+
+      activeSessionItems[session.id] = {
+        element: sessionItem,
+        intervalId: intervalId
+      };
     });
 
   } catch (err) {
