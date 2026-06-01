@@ -499,30 +499,33 @@ el.authForm.addEventListener("submit", async (e) => {
         .eq('participant_guest_id', guestId)
         .limit(1);
 
-      // 2. Fallback: match by name and optional email if guestId search was empty
+      // 2. Fallback: match by name case-insensitively if guestId search was empty
       if (!existingResponse || existingResponse.length === 0) {
-        let nameAndEmailQuery = supabaseClient
+        const { data: nameMatches } = await supabaseClient
           .from('user_responses')
           .select('participant_guest_id, participant_name, participant_email')
           .eq('session_id', session.id)
           .ilike('participant_name', name);
-        
-        if (email) {
-          nameAndEmailQuery = nameAndEmailQuery.eq('participant_email', email);
-        } else {
-          nameAndEmailQuery = nameAndEmailQuery.is('participant_email', null);
-        }
 
-        const { data: fallbackResponse } = await nameAndEmailQuery.limit(1);
-        if (fallbackResponse && fallbackResponse.length > 0) {
-          existingResponse = fallbackResponse;
+        if (nameMatches && nameMatches.length > 0) {
+          // If the user typed an email, try to find an exact email match first
+          let matchedRecord = null;
+          if (email) {
+            matchedRecord = nameMatches.find(r => r.participant_email && r.participant_email.trim().toLowerCase() === email.toLowerCase());
+          }
+          // If no specific email match was found or user didn't enter an email, fallback to the first name match
+          if (!matchedRecord) {
+            matchedRecord = nameMatches[0];
+          }
+
+          existingResponse = [matchedRecord];
           // Restore/Sync the guestId!
-          guestId = fallbackResponse[0].participant_guest_id;
+          guestId = matchedRecord.participant_guest_id;
           sessionStorage.setItem("guest_id", guestId);
           state.guestId = guestId;
           
-          state.name = fallbackResponse[0].participant_name;
-          state.email = fallbackResponse[0].participant_email || "";
+          state.name = matchedRecord.participant_name;
+          state.email = matchedRecord.participant_email || "";
           el.summaryName.textContent = state.name;
         }
       }
