@@ -1110,9 +1110,16 @@ async function loadLeaderboardData() {
           correctCount: 0,
           totalCount: 0,
           timeTakenMs: r.time_taken_ms,
-          isCheater: false
+          isCheater: false,
+          answeredQuestions: new Set()
         };
       }
+
+      // Deduplicate marks to ensure strictly 1 mark per question
+      if (userGroups[key].answeredQuestions.has(r.question_id)) {
+        return;
+      }
+      userGroups[key].answeredQuestions.add(r.question_id);
 
       // Check if flagged with DQ
       if (r.selected_option === "AUTO_SUBMIT_DQ") {

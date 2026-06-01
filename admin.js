@@ -440,10 +440,14 @@ async function generatePrivateLeaderboard(pin) {
           correctCount: 0,
           totalCount: 0,
           timeTakenMs: r.time_taken_ms,
-          isCheater: false
+          isCheater: false,
+          answeredQuestions: new Set()
         };
       }
       
+      if (userGroups[key].answeredQuestions.has(r.question_id)) return;
+      userGroups[key].answeredQuestions.add(r.question_id);
+
       if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
       if (r.is_correct) userGroups[key].correctCount++;
       userGroups[key].totalCount++;
@@ -514,10 +518,14 @@ el.btnExportCsv.addEventListener('click', async () => {
           correctCount: 0,
           totalCount: 0,
           timeTakenMs: r.time_taken_ms,
-          isCheater: false
+          isCheater: false,
+          answeredQuestions: new Set()
         };
       }
       
+      if (userGroups[key].answeredQuestions.has(r.question_id)) return;
+      userGroups[key].answeredQuestions.add(r.question_id);
+
       if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
       if (r.is_correct) userGroups[key].correctCount++;
       userGroups[key].totalCount++;
