@@ -408,7 +408,11 @@ el.authForm.addEventListener("submit", async (e) => {
     subscribeToSession();
 
     // Evaluate initial view based on session status
-    evaluateSessionStatus(session.status);
+    let initialStatus = session.status;
+    if (initialStatus === 'in_progress' && session.completed_at) {
+      initialStatus = 'evaluation';
+    }
+    evaluateSessionStatus(initialStatus);
 
   } catch (err) {
     console.error("Connection error:", err);
@@ -439,7 +443,11 @@ function subscribeToSession() {
       },
       (payload) => {
         console.log("Realtime Session Update received:", payload.new);
-        evaluateSessionStatus(payload.new.status);
+        let effectiveStatus = payload.new.status;
+        if (effectiveStatus === 'in_progress' && payload.new.completed_at) {
+          effectiveStatus = 'evaluation';
+        }
+        evaluateSessionStatus(effectiveStatus);
       }
     )
     .subscribe();

@@ -362,8 +362,15 @@ async function updateSessionStatus(status) {
   if (!/^\d{6}$/.test(pin)) return showToast("Invalid PIN. Must be 6 digits.");
 
   const payload = { status: status };
-  if (status === 'in_progress') payload.started_at = new Date().toISOString();
-  else if (status === 'completed') payload.completed_at = new Date().toISOString();
+  if (status === 'evaluation') {
+    payload.status = 'in_progress';
+    payload.completed_at = new Date().toISOString();
+  } else if (status === 'in_progress') {
+    payload.started_at = new Date().toISOString();
+    payload.completed_at = null;
+  } else if (status === 'completed') {
+    payload.completed_at = new Date().toISOString();
+  }
 
   try {
     const { error } = await supabaseClient
