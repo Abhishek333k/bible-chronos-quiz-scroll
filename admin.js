@@ -365,7 +365,8 @@ el.formImportCsv.addEventListener('submit', async (e) => {
           question_text: cols[qIdx],
           options: optionsArr,
           correct_index: Number(correctIndex),
-          correct_option: optionsArr[correctIndex]
+          correct_option: optionsArr[correctIndex],
+          sort_order: i  // 1-based index preserving CSV file order
         });
       }
 

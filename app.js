@@ -635,6 +635,7 @@ async function loadAndInitializeQuiz() {
       .from("questions")
       .select("*")
       .eq("quiz_id", state.quizId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
 
     if (error || !questions || questions.length === 0) {
