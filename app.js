@@ -619,7 +619,8 @@ async function loadAndInitializeQuiz() {
     const { data: questions, error } = await supabaseClient
       .from("questions")
       .select("*")
-      .eq("quiz_id", state.quizId);
+      .eq("quiz_id", state.quizId)
+      .order('created_at', { ascending: true });
 
     if (error || !questions || questions.length === 0) {
       showToast("No questions found for this quiz. Exiting fullscreen...");
