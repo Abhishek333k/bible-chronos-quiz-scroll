@@ -1545,6 +1545,16 @@ input:checked + .toggle-slider:before {
   width: 0%;
 }
 
+.candidate-live-score {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--color-success);
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  font-family: monospace;
+}
+
 @media (max-height: 600px) and (orientation: landscape) {
   #app-container {
     padding: 0.5rem;

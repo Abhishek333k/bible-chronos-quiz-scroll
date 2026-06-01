@@ -464,6 +464,20 @@ function evaluateSessionStatus(status) {
         audio.play().catch(e => console.warn("Audio playback prevented:", e));
       } catch(e) {}
     }
+  } else if (status === 'evaluation') {
+    // Exam halted by admin
+    if (state.currentView === 'view-quiz') {
+      submitQuiz(false); // Force submit if they are taking the quiz
+    } else if (state.currentView !== 'view-results') {
+      showView("view-lock");
+    }
+    
+    // Update the lock screen message
+    const lockTitle = el.viewLock.querySelector('.card-title');
+    const lockDesc = el.viewLock.querySelector('.card-description');
+    if (lockTitle) lockTitle.textContent = "Exam Halted for Evaluation";
+    if (lockDesc) lockDesc.textContent = "Exam Halted. Proctors are currently evaluating the results. Please wait.";
+    
   } else if (status === 'completed') {
     // If the exam status changes to completed, pull the final leaderboard
     loadLeaderboardData();
@@ -577,6 +591,14 @@ function saveDisasterRecovery() {
 
 function sendTelemetry() {
   if (state.realtimeChannel) {
+    let currentScore = 0;
+    Object.keys(state.userAnswers).forEach(qId => {
+      const q = state.questions.find(x => x.id === qId);
+      if (q && q.correct_option === state.userAnswers[qId]) {
+        currentScore++;
+      }
+    });
+
     state.realtimeChannel.send({
       type: 'broadcast',
       event: 'telemetry',
@@ -585,7 +607,8 @@ function sendTelemetry() {
         name: state.name,
         answered: Object.keys(state.userAnswers).length,
         total: state.questions.length,
-        flagged: Object.keys(state.reviewFlags).length
+        flagged: Object.keys(state.reviewFlags).length,
+        currentScore: currentScore
       }
     });
   }

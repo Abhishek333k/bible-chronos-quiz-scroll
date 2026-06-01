@@ -63,8 +63,11 @@ const el = {
   // Panel 3: Live Ops
   liveSessionPin: document.getElementById('live-session-pin'),
   btnStartExam: document.getElementById('btn-start-exam'),
-  btnEndExam: document.getElementById('btn-end-exam'),
+  btnHaltExam: document.getElementById('btn-halt-exam'),
+  btnPublishResults: document.getElementById('btn-publish-results'),
   btnExportCsv: document.getElementById('btn-export-csv'),
+  privateAdminLeaderboard: document.getElementById('private-admin-leaderboard'),
+  privateLeaderboardTbody: document.getElementById('private-leaderboard-tbody'),
 
   // Panel 4: Ledger Management
   ledgerQuizList: document.getElementById('ledger-quiz-list'),
@@ -234,19 +237,16 @@ el.formImportCsv.addEventListener('submit', async (e) => {
       const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 2) throw new Error("CSV requires a header row and data.");
 
-      const questionsToInsert = [];
-      for (let i = 1; i < lines.length; i++) {
+      const parseCsvLine = (line) => {
         const cols = [];
         let current = '';
         let inQuotes = false;
-        const line = lines[i];
-        
         for (let j = 0; j < line.length; j++) {
           const char = line[j];
           if (char === '"') {
             if (inQuotes && line[j + 1] === '"') {
               current += '"';
-              j++; // skip the escaped quote
+              j++;
             } else {
               inQuotes = !inQuotes;
             }
@@ -257,15 +257,33 @@ el.formImportCsv.addEventListener('submit', async (e) => {
             current += char;
           }
         }
-        cols.push(current.trim()); // push the last column
+        cols.push(current.trim());
+        return cols;
+      };
 
-        if (cols.length < 6) continue;
+      const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+      
+      const qIdx = headers.findIndex(h => h.includes("question"));
+      const aIdx = headers.findIndex(h => h === "option a" || h === "a");
+      const bIdx = headers.findIndex(h => h === "option b" || h === "b");
+      const cIdx = headers.findIndex(h => h === "option c" || h === "c");
+      const dIdx = headers.findIndex(h => h === "option d" || h === "d");
+      const corrIdx = headers.findIndex(h => h.includes("correct option") || h.includes("correct answer"));
+      
+      if (qIdx === -1 || aIdx === -1 || bIdx === -1 || cIdx === -1 || dIdx === -1 || corrIdx === -1) {
+         throw new Error("Missing required headers in CSV.");
+      }
+
+      const questionsToInsert = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvLine(lines[i]);
+        if (cols.length <= Math.max(qIdx, aIdx, bIdx, cIdx, dIdx, corrIdx)) continue;
 
         questionsToInsert.push({
           quiz_id: quizId,
-          question_text: cols[0],
-          options: [cols[1], cols[2], cols[3], cols[4]],
-          correct_option: cols[5]
+          question_text: cols[qIdx],
+          options: [cols[aIdx], cols[bIdx], cols[cIdx], cols[dIdx]],
+          correct_option: cols[corrIdx]
         });
       }
 
@@ -358,9 +376,14 @@ async function updateSessionStatus(status) {
     if (status === 'in_progress') {
       showToast(`▶ EXAM STARTED for PIN ${pin}!`);
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'none';
+      if (el.privateAdminLeaderboard) el.privateAdminLeaderboard.style.display = 'none';
       syncTelemetrySubscription(pin);
+    } else if (status === 'evaluation') {
+      showToast(`⏸ EXAM HALTED for Evaluation (PIN ${pin})!`);
+      if (el.privateAdminLeaderboard) el.privateAdminLeaderboard.style.display = 'block';
+      generatePrivateLeaderboard(pin);
     } else {
-      showToast(`⏹ EXAM ENDED for PIN ${pin}!`);
+      showToast(`✅ EXAM COMPLETED for PIN ${pin}!`);
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'block';
     }
   } catch (err) {
@@ -374,11 +397,88 @@ el.btnStartExam.addEventListener('click', async () => {
   }
 });
 
-el.btnEndExam.addEventListener('click', async () => {
-  if (await showCustomConfirm("END the exam? This locks screens and displays the leaderboard.")) {
-    updateSessionStatus('completed');
+el.btnHaltExam.addEventListener('click', async () => {
+  if (await showCustomConfirm("HALT the exam? This will securely lock all candidate screens for proctor evaluation.")) {
+    updateSessionStatus('evaluation');
+    el.btnHaltExam.style.display = 'none';
+    el.btnPublishResults.style.display = 'block';
   }
 });
+
+el.btnPublishResults.addEventListener('click', async () => {
+  if (await showCustomConfirm("PUBLISH RESULTS? This will reveal the final leaderboard to all candidates.")) {
+    updateSessionStatus('completed');
+    el.btnPublishResults.style.display = 'none';
+    el.btnHaltExam.style.display = 'block';
+  }
+});
+
+async function generatePrivateLeaderboard(pin) {
+  try {
+    const { data: sessionData, error: sessionError } = await supabaseClient
+      .from('quiz_sessions')
+      .select('id')
+      .eq('access_pin', pin)
+      .single();
+      
+    if (sessionError || !sessionData) return;
+
+    const { data: responses, error: respError } = await supabaseClient
+      .from('user_responses')
+      .select('*')
+      .eq('session_id', sessionData.id);
+
+    if (respError || !responses) return;
+
+    const userGroups = {};
+    responses.forEach(r => {
+      const key = r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
+      if (!userGroups[key]) {
+        userGroups[key] = {
+          name: r.participant_name,
+          email: r.participant_email || "Guest",
+          correctCount: 0,
+          totalCount: 0,
+          timeTakenMs: r.time_taken_ms,
+          isCheater: false
+        };
+      }
+      
+      if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
+      if (r.is_correct) userGroups[key].correctCount++;
+      userGroups[key].totalCount++;
+    });
+
+    const rankings = Object.values(userGroups).sort((a, b) => {
+      if (a.isCheater && !b.isCheater) return 1;
+      if (!a.isCheater && b.isCheater) return -1;
+      if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+      return a.timeTakenMs - b.timeTakenMs;
+    });
+
+    el.privateLeaderboardTbody.innerHTML = "";
+    if (rankings.length === 0) {
+      el.privateLeaderboardTbody.innerHTML = `<tr><td colspan="5" class="text-center">No participants recorded yet.</td></tr>`;
+      return;
+    }
+
+    rankings.forEach((player, idx) => {
+      const tr = document.createElement("tr");
+      const status = player.isCheater ? `<span style="color:#ef4444;">DQ (Violations)</span>` : `<span style="color:#10b981;">Active</span>`;
+      const timeSec = (player.timeTakenMs / 1000).toFixed(1);
+      tr.innerHTML = `
+        <td style="padding: 0.5rem;">${idx + 1}</td>
+        <td style="padding: 0.5rem;"><strong>${player.name}</strong></td>
+        <td style="padding: 0.5rem;">${player.correctCount}/${player.totalCount}</td>
+        <td style="padding: 0.5rem; font-family: monospace;">${timeSec}s</td>
+        <td style="padding: 0.5rem;">${status}</td>
+      `;
+      el.privateLeaderboardTbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error("Private leaderboard error:", err);
+  }
+}
 
 el.btnExportCsv.addEventListener('click', async () => {
   const pin = el.liveSessionPin.value.trim();
@@ -856,6 +956,7 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
   const answered = data.answered || 0;
   const total = data.total || 0;
   const flagged = data.flagged || 0;
+  const currentScore = data.currentScore || 0;
   const progressPercent = total > 0 ? Math.round((answered / total) * 100) : 0;
 
   card.innerHTML = `
@@ -870,6 +971,7 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
     <div class="candidate-progress-bar-container">
       <div class="candidate-progress-bar-fill" style="width: ${progressPercent}%"></div>
     </div>
+    <div class="candidate-live-score">Score: ${currentScore} / ${total}</div>
   `;
 }
 
