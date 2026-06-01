@@ -491,10 +491,24 @@ el.authForm.addEventListener("submit", async (e) => {
     }
 
     if (initialStatus === 'completed') {
-      showToast("⚠️ This session has already ended. Ask your host to open a new session.");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Join Session";
-      return;
+      const { data: existingResponse } = await supabaseClient
+        .from('user_responses')
+        .select('id')
+        .eq('session_id', session.id)
+        .eq('participant_guest_id', guestId)
+        .limit(1);
+
+      if (existingResponse && existingResponse.length > 0) {
+        subscribeToSession();
+        await loadLeaderboardData();
+        showView("view-results");
+        return;
+      } else {
+        showToast("⚠️ This session has already ended. Ask your host to open a new session.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Join Session";
+        return;
+      }
     }
 
     if (initialStatus === 'evaluation') {
