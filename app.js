@@ -484,11 +484,26 @@ el.authForm.addEventListener("submit", async (e) => {
     // Connect to real-time subscription for host state
     subscribeToSession();
 
-    // Evaluate initial view based on session status
+    // Guard: block joining a session that is already ended
     let initialStatus = session.status;
     if (initialStatus === 'in_progress' && session.completed_at) {
       initialStatus = 'evaluation';
     }
+
+    if (initialStatus === 'completed') {
+      showToast("⚠️ This session has already ended. Ask your host to open a new session.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Join Session";
+      return;
+    }
+
+    if (initialStatus === 'evaluation') {
+      showToast("⚠️ This session is currently under evaluation. Please wait for the host.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Join Session";
+      return;
+    }
+
     evaluateSessionStatus(initialStatus);
 
   } catch (err) {
