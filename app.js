@@ -67,6 +67,7 @@ let state = {
   currentQuestionIndex: 0,
   userAnswers: {}, // Format: { questionId: selectedOptionText }
   reviewFlags: {}, // Format: { questionId: boolean }
+  textScale: 1,
 
   // Speedrun Timer State
   startTime: null,
@@ -122,6 +123,9 @@ const el = {
 
   // Quiz View
   quizTitleText: document.getElementById("quiz-title-text"),
+  btnTextDecrease: document.getElementById("btn-text-decrease"),
+  btnTextReset: document.getElementById("btn-text-reset"),
+  btnTextIncrease: document.getElementById("btn-text-increase"),
   chronosTimer: document.getElementById("chronos-timer"),
   progressText: document.getElementById("question-progress-text"),
   progressBarFill: document.getElementById("quiz-progress-fill"),
@@ -1363,3 +1367,23 @@ function showCustomConfirm(message) {
     btnNo.addEventListener('click', onNo);
   });
 }
+
+// ----------------------------------------------------
+// 21. Accessibility: WCAG Text Scaling Engine
+// ----------------------------------------------------
+function updateTextScale(modifier) {
+  if (modifier === 0) {
+    state.textScale = 1;
+  } else {
+    state.textScale += modifier;
+    // Clamp the scale multiplier between 0.8 (min) and 1.6 (max)
+    if (state.textScale < 0.8) state.textScale = 0.8;
+    if (state.textScale > 1.6) state.textScale = 1.6;
+  }
+  // Apply globally via CSS variable injection
+  document.documentElement.style.setProperty('--text-scale', state.textScale);
+}
+
+if (el.btnTextDecrease) el.btnTextDecrease.addEventListener('click', () => updateTextScale(-0.1));
+if (el.btnTextReset) el.btnTextReset.addEventListener('click', () => updateTextScale(0));
+if (el.btnTextIncrease) el.btnTextIncrease.addEventListener('click', () => updateTextScale(0.1));

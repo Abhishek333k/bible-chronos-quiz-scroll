@@ -9,6 +9,7 @@
   --border-gold: rgba(193, 154, 107, 0.25);
   --border-gold-hover: rgba(193, 154, 107, 0.5);
   --color-text-primary: #fafafa;
+  --text-scale: 1;
   --color-text-secondary: #a1a1aa;
   --color-gold: #c19a6b;
   --color-gold-bright: #f5e6c8;
@@ -472,7 +473,7 @@ body::after {
 .quiz-info-left, .quiz-info-right {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 1rem;
 }
 
 .badge-round {
@@ -779,7 +780,7 @@ body::after {
 }
 
 .question-text {
-  font-size: 1.2rem;
+  font-size: calc(1.2rem * var(--text-scale));
   font-weight: 500;
   line-height: 1.5;
   color: var(--color-text-primary);
@@ -835,7 +836,11 @@ body::after {
   font-weight: 700;
   color: var(--color-gold);
   margin-right: 1rem;
-  font-size: 1.05rem;
+  font-size: calc(1rem * var(--text-scale));
+}
+
+.option-text-content {
+  font-size: calc(1rem * var(--text-scale));
 }
 
 /* ----------------------------------------------------
@@ -1644,4 +1649,24 @@ input:checked + .toggle-slider:before {
   padding: 1.5rem; 
   border: 1px dashed var(--color-gold); 
   border-radius: 6px;
+}
+
+/* Accessibility Controls */
+.a11y-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+.btn-a11y {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid var(--border-gold);
+  color: var(--color-gold);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-weight: bold;
+  font-family: monospace;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.btn-a11y:hover {
+  background: rgba(193, 154, 107, 0.2);
 }
