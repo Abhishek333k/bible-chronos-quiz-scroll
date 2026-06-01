@@ -250,41 +250,49 @@ function renderBooklet() {
   if (!state.questions || state.questions.length === 0) return;
   
   state.questions.forEach((q, idx) => {
-    const userChoice = state.userAnswers[q.id] || "No Answer Selected";
-    const correctChoice = q.correct_option;
-    const isCorrect = userChoice === correctChoice;
+    let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
+    const userChoiceIndex = state.userAnswers[q.id];
+    const userChoice = userChoiceIndex !== undefined ? originalOptions[userChoiceIndex] : "No Answer Selected";
+    const correctChoice = originalOptions[q.correct_index];
+    const isCorrect = userChoiceIndex === q.correct_index;
     
     const block = document.createElement('div');
     block.className = 'booklet-card card glassmorphism';
     
-    let answerHtml = '';
+    const headerHtml = `
+      <h4 class="booklet-question-text"></h4>
+      ${q.image_url ? `<img src="${q.image_url}" class="question-media" style="display:block; max-width:100%; margin-bottom:1rem; border-radius:8px;" />` : ''}
+    `;
+
+    const answersContainer = document.createElement('div');
+    answersContainer.className = 'booklet-answers';
     
     if (isCorrect) {
-      answerHtml = `
+      answersContainer.innerHTML = `
         <div class="booklet-answer-box">
           <span class="booklet-label">Your Answer:</span>
-          <span class="answer-correct">${userChoice}</span>
+          <span class="answer-correct"></span>
         </div>
       `;
+      answersContainer.querySelector('.answer-correct').textContent = userChoice;
     } else {
-      answerHtml = `
+      answersContainer.innerHTML = `
         <div class="booklet-answer-box">
           <span class="booklet-label">Your Answer:</span>
-          <span class="answer-wrong">${userChoice}</span>
+          <span class="answer-wrong"></span>
         </div>
         <div class="booklet-answer-box" style="margin-top: 0.5rem;">
           <span class="booklet-label">Correct Answer:</span>
-          <span class="answer-correct">${correctChoice}</span>
+          <span class="answer-correct"></span>
         </div>
       `;
+      answersContainer.querySelector('.answer-wrong').textContent = userChoice;
+      answersContainer.querySelector('.answer-correct').textContent = correctChoice;
     }
     
-    block.innerHTML = `
-      <h4 class="booklet-question-text">Q${idx + 1}. ${q.question_text}</h4>
-      <div class="booklet-answers">
-        ${answerHtml}
-      </div>
-    `;
+    block.innerHTML = headerHtml;
+    block.querySelector('.booklet-question-text').textContent = `Q${idx + 1}. ${q.question_text}`;
+    block.appendChild(answersContainer);
     
     el.bookletContent.appendChild(block);
   });
@@ -504,14 +512,16 @@ function evaluateSessionStatus(status) {
 // ----------------------------------------------------
 el.btnEnterFullscreen.addEventListener("click", async () => {
   try {
-    // Attempt to enter fullscreen (required anti-cheat trigger)
-    const docEl = document.documentElement;
-    if (docEl.requestFullscreen) {
-      await docEl.requestFullscreen();
-    } else if (docEl.webkitRequestFullscreen) {
-      await docEl.webkitRequestFullscreen();
-    } else if (docEl.msRequestFullscreen) {
-      await docEl.msRequestFullscreen();
+    if (state.isAntiCheatEnabled) {
+      // Attempt to enter fullscreen (required anti-cheat trigger)
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen();
+      } else if (docEl.webkitRequestFullscreen) {
+        await docEl.webkitRequestFullscreen();
+      } else if (docEl.msRequestFullscreen) {
+        await docEl.msRequestFullscreen();
+      }
     }
   } catch (err) {
     console.warn("Fullscreen request rejected or not supported. Proceeding anyway...", err);
@@ -602,7 +612,7 @@ function sendTelemetry() {
     let currentScore = 0;
     Object.keys(state.userAnswers).forEach(qId => {
       const q = state.questions.find(x => x.id === qId);
-      if (q && q.correct_option === state.userAnswers[qId]) {
+      if (q && q.correct_index === state.userAnswers[qId]) {
         currentScore++;
       }
     });
@@ -632,41 +642,46 @@ function initializeQuizUI() {
       const qBlock = document.createElement('div');
       qBlock.id = 'scroll-q-' + index;
       qBlock.className = 'scroll-question-block card glassmorphism paged-card';
+      const imageHtml = q.image_url ? `<img class="question-media" src="${q.image_url}" alt="Question Image" style="display: block;">` : `<img class="question-media" src="" alt="Question Image" style="display: none;">`;
       qBlock.innerHTML = `
         <div class="question-header">
           <span class="question-number-badge">Q${index + 1}</span>
-          <h3 class="question-text">${q.question_text}</h3>
+          <h3 class="question-text"></h3>
         </div>
+        ${imageHtml}
         <div class="options-container" id="scroll-opts-${q.id}"></div>
         <div class="question-actions">
           <button class="btn-secondary btn-clear-response">🧹 Clear Response</button>
           <button class="btn-secondary btn-mark-review">🚩 Mark for Review</button>
         </div>
       `;
+      qBlock.querySelector('.question-text').textContent = q.question_text;
       el.quizContentArea.appendChild(qBlock);
       
       const optContainer = document.getElementById(`scroll-opts-${q.id}`);
       let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
-      // Use pre-shuffled options if they exist
-      if (!q._shuffledOpts) {
-        q._shuffledOpts = state.isJumbled ? fisherYatesShuffle([...originalOptions]) : [...originalOptions];
+      // Shuffle indices [0, 1, 2, 3] instead of raw text
+      if (!q._shuffledIndices) {
+        const indices = [0, 1, 2, 3].slice(0, originalOptions.length);
+        q._shuffledIndices = state.isJumbled ? fisherYatesShuffle(indices) : indices;
       }
       
-      q._shuffledOpts.forEach((optText, optIdx) => {
-        const letter = String.fromCharCode(65 + optIdx);
+      q._shuffledIndices.forEach((origIdx, displayIdx) => {
+        const optText = originalOptions[origIdx];
+        const letter = String.fromCharCode(65 + displayIdx);
         const btn = document.createElement('button');
         btn.className = "option-btn";
         btn.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
         btn.querySelector(".option-text-content").textContent = optText;
         
-        if (state.userAnswers[q.id] === optText) {
+        if (state.userAnswers[q.id] === origIdx) {
           btn.classList.add("selected");
         }
         
         btn.addEventListener('click', () => {
           optContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
           btn.classList.add('selected');
-          state.userAnswers[q.id] = optText;
+          state.userAnswers[q.id] = origIdx;
           saveDisasterRecovery();
           updateFooterCounter();
           updateQuestionMap();
@@ -770,7 +785,7 @@ function updateQuestionMap() {
       mapBtn.className = 'map-btn';
       mapBtn.textContent = idx + 1;
       
-      const answered = !!state.userAnswers[q.id];
+      const answered = state.userAnswers[q.id] !== undefined;
       const flagged = !!state.reviewFlags[q.id];
       
       if (flagged) {
@@ -814,6 +829,16 @@ function renderQuestionPaged() {
   el.questionIndexBadge.textContent = `Q${state.currentQuestionIndex + 1}`;
   el.questionContent.textContent = currentQuestion.question_text;
   
+  const imgElement = document.getElementById("question-image");
+  if (imgElement) {
+    if (currentQuestion.image_url) {
+      imgElement.src = currentQuestion.image_url;
+      imgElement.style.display = "block";
+    } else {
+      imgElement.style.display = "none";
+    }
+  }
+  
   el.optionsWrapper.innerHTML = "";
   
   // Navigation Buttons State
@@ -835,25 +860,27 @@ function renderQuestionPaged() {
   // For simplicity, we just use the original options array or shuffle it on every render,
   // but shuffling on every render changes the order.
   // Better to attach shuffled options to the question object during initialization!
-  if (!currentQuestion._shuffledOpts) {
-    currentQuestion._shuffledOpts = state.isJumbled ? fisherYatesShuffle([...originalOptions]) : [...originalOptions];
+  if (!currentQuestion._shuffledIndices) {
+    const indices = [0, 1, 2, 3].slice(0, originalOptions.length);
+    currentQuestion._shuffledIndices = state.isJumbled ? fisherYatesShuffle(indices) : indices;
   }
   
-  currentQuestion._shuffledOpts.forEach((optText, index) => {
-    const letter = String.fromCharCode(65 + index);
+  currentQuestion._shuffledIndices.forEach((origIdx, displayIdx) => {
+    const optText = originalOptions[origIdx];
+    const letter = String.fromCharCode(65 + displayIdx);
     const button = document.createElement("button");
     button.className = "option-btn";
     button.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
     button.querySelector(".option-text-content").textContent = optText;
     
-    if (state.userAnswers[currentQuestion.id] === optText) {
+    if (state.userAnswers[currentQuestion.id] === origIdx) {
       button.classList.add("selected");
     }
     
     button.addEventListener("click", () => {
       document.querySelectorAll(".option-btn").forEach(btn => btn.classList.remove("selected"));
       button.classList.add("selected");
-      state.userAnswers[currentQuestion.id] = optText;
+      state.userAnswers[currentQuestion.id] = origIdx;
       saveDisasterRecovery();
       updateQuestionMap(); // Update grid style
       sendTelemetry();
@@ -994,12 +1021,14 @@ function closeCheatModal() {
 el.btnResumeQuiz.addEventListener("click", async () => {
   closeCheatModal();
   try {
-    const docEl = document.documentElement;
-    if (!document.fullscreenElement) {
-      if (docEl.requestFullscreen) {
-        await docEl.requestFullscreen();
-      } else if (docEl.webkitRequestFullscreen) {
-        await docEl.webkitRequestFullscreen();
+    if (state.isAntiCheatEnabled) {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        }
       }
     }
   } catch (err) {
@@ -1009,21 +1038,27 @@ el.btnResumeQuiz.addEventListener("click", async () => {
 
 // Event Listeners for Anti-Cheat Monitoring
 document.addEventListener("fullscreenchange", () => {
-  // If the user left fullscreen and they are actively taking a quiz
-  if (!document.fullscreenElement && state.currentView === "view-quiz" && !state.isCheatModalOpen) {
-    handleViolation("Exited fullscreen mode");
+  if (state.isAntiCheatEnabled === true) {
+    // If the user left fullscreen and they are actively taking a quiz
+    if (!document.fullscreenElement && state.currentView === "view-quiz" && !state.isCheatModalOpen) {
+      handleViolation("Exited fullscreen mode");
+    }
   }
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && state.currentView === "view-quiz") {
-    handleViolation("Switched tab/minimized window");
+  if (state.isAntiCheatEnabled === true) {
+    if (document.hidden && state.currentView === "view-quiz") {
+      handleViolation("Switched tab/minimized window");
+    }
   }
 });
 
 window.addEventListener("blur", () => {
-  if (state.currentView === "view-quiz") {
-    handleViolation("Focus lost from quiz window");
+  if (state.isAntiCheatEnabled === true) {
+    if (state.currentView === "view-quiz") {
+      handleViolation("Focus lost from quiz window");
+    }
   }
 });
 
@@ -1048,20 +1083,21 @@ async function submitQuiz(isForcedCheater = false) {
 
   try {
     const responsesToInsert = state.questions.map(q => {
-      const selected = state.userAnswers[q.id];
+      const selectedIndex = state.userAnswers[q.id];
+      let originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
       
       // If cheater and did not answer this question yet, or if they tabbed out completely
-      let selectedOptionToSave = selected || "NO_RESPONSE";
+      let selectedOptionToSave = selectedIndex !== undefined ? originalOptions[selectedIndex] : "NO_RESPONSE";
       let isCorrectValue = false;
 
       if (isForcedCheater) {
         // Flag remaining answers with a special DQ string
-        if (!selected) {
+        if (selectedIndex === undefined) {
           selectedOptionToSave = "AUTO_SUBMIT_DQ";
         }
         isCorrectValue = false;
       } else {
-        isCorrectValue = (selected === q.correct_option);
+        isCorrectValue = (selectedIndex === q.correct_index);
       }
 
       return {

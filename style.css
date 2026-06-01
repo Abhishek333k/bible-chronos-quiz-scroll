@@ -34,14 +34,26 @@ body {
   background-color: var(--bg-primary);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
-  min-height: calc(var(--vh, 1vh) * 100);
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   overflow-x: hidden;
   position: relative;
+
+  /* Text Anti-Copy Protection */
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+  -webkit-touch-callout: none; /* iOS Safari */
+}
+
+/* Re-enable selection ONLY for input fields so users can type their PIN/Name */
+input, textarea {
+  -webkit-user-select: auto;
+  -ms-user-select: auto;
+  user-select: auto;
 }
 
 /* Cinematic background glow */
@@ -80,8 +92,7 @@ body::after {
 #app-container {
   width: 100%;
   max-width: 720px;
-  min-height: 100vh;
-  min-height: calc(var(--vh, 1vh) * 100);
+  min-height: 100dvh;
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
@@ -1565,4 +1576,59 @@ input:checked + .toggle-slider:before {
   .title-primary {
     font-size: 1.2rem;
   }
+}
+
+/* Image Rendering / Anti-CLS */
+.question-media {
+  max-height: 35vh;
+  min-height: 120px;
+  width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid rgba(193, 154, 107, 0.2);
+  margin-bottom: 1rem;
+}
+
+
+/* Upload Telemetry */
+.upload-progress-container { margin-top: 1rem; background: rgba(0, 0, 0, 0.4); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--color-gold); }
+.upload-progress-text { font-size: 0.85rem; color: var(--color-gold); margin-bottom: 0.5rem; font-family: monospace; }
+.upload-progress-bar { width: 100%; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; position: relative; }
+.upload-progress-fill { height: 100%; width: 50%; background: linear-gradient(90deg, transparent, #f59e0b, #10b981, transparent); background-size: 200% 100%; animation: slide-progress 1.5s infinite linear; }
+@keyframes slide-progress { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+
+/* Image Preview Styling */
+.image-preview-wrapper { position: relative; display: inline-block; margin-top: 1rem; border: 1px solid rgba(193, 154, 107, 0.3); border-radius: 8px; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); }
+.admin-image-preview { max-height: 150px; width: auto; object-fit: contain; display: block; border-radius: 4px; }
+.btn-remove-image { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3); padding: 0; }
+.btn-remove-image:hover { background: #dc2626; }
+
+/* Ledger Layout Utilities */
+.ledger-section-block { margin-bottom: 2rem; }
+.ledger-section-title { color: var(--color-gold); font-size: 1.1rem; border-bottom: 1px solid var(--border-gold); padding-bottom: 0.5rem; margin-bottom: 1rem; }
+.ledger-item-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.btn-dashed { border: 1px dashed var(--color-gold); color: var(--color-gold); margin-bottom: 1.5rem; }
+.title-gold-small { color: var(--color-gold-bright); margin-top: 0; margin-bottom: 1rem; }
+.hidden { display: none !important; }
+.margin-top-md { margin-top: 1rem; }
+.action-buttons-row { display: flex; gap: 1rem; }
+
+/* The Mini-Map Scroll Constraint Fix */
+.ledger-map-container {
+  max-height: 180px; 
+  overflow-y: auto; 
+  margin-bottom: 1.5rem;
+  padding-right: 0.5rem;
+  border: 1px solid rgba(193, 154, 107, 0.1);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.2);
+}
+
+/* Edit Panel Container */
+.edit-panel-card {
+  background: rgba(0,0,0,0.4); 
+  padding: 1.5rem; 
+  border: 1px dashed var(--color-gold); 
+  border-radius: 6px;
 }

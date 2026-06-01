@@ -221,15 +221,35 @@
     ⚠️ ADMINISTRATIVE COMMAND CENTER: Do not share this URL with participants. ⚠️
   </div>
 
-  <!-- Tab Navigation -->
-  <nav class="admin-tabs" id="admin-tabs">
-    <button class="tab-btn active" data-target="tab-scriptorium">✍️ The Scriptorium</button>
-    <button class="tab-btn" data-target="tab-deploy">🏛️ Deploy Session</button>
-    <button class="tab-btn" data-target="tab-live">⚙️ Live Operations</button>
-    <button class="tab-btn" data-target="tab-ledger">📚 Ledger</button>
-  </nav>
+  <!-- Admin Auth Gate -->
+  <div id="admin-login-container" style="max-width: 400px; margin: 5rem auto; text-align: center;">
+    <section class="card glassmorphism admin-panel">
+      <div class="panel-icon">🛡️</div>
+      <h2 class="card-title">Command Center Auth</h2>
+      <p class="card-description" style="margin-bottom: 1.5rem;">Authenticate to access Proctor controls.</p>
+      <form id="form-admin-login">
+        <div class="form-group">
+          <input type="email" id="admin-email" placeholder="Admin Email" required style="width: 100%; margin-bottom: 1rem; padding: 0.75rem; border-radius: 4px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--color-gold);">
+        </div>
+        <div class="form-group">
+          <input type="password" id="admin-password" placeholder="Admin Password" required style="width: 100%; margin-bottom: 1.5rem; padding: 0.75rem; border-radius: 4px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--color-gold);">
+        </div>
+        <button type="submit" class="btn-primary btn-block">Login to Command Center</button>
+      </form>
+    </section>
+  </div>
 
-  <div class="dashboard-container">
+  <!-- Hidden Secure Dashboard Wrapper -->
+  <div id="secure-dashboard-wrapper" style="display: none;">
+    <!-- Tab Navigation -->
+    <nav class="admin-tabs" id="admin-tabs">
+      <button class="tab-btn active" data-target="tab-scriptorium">✍️ The Scriptorium</button>
+      <button class="tab-btn" data-target="tab-deploy">🏛️ Deploy Session</button>
+      <button class="tab-btn" data-target="tab-live">⚙️ Live Operations</button>
+      <button class="tab-btn" data-target="tab-ledger">📚 Ledger</button>
+    </nav>
+
+    <div class="dashboard-container">
     
     <!-- PANEL 1: The Scriptorium (Quiz Manager) -->
     <div id="tab-scriptorium" class="tab-content active">
@@ -264,6 +284,19 @@
           <textarea id="question-text" required placeholder="Enter the question..."></textarea>
         </div>
         
+        <div class="form-group">
+          <label for="q-image">Question Image (Optional)</label>
+          <input type="file" id="q-image" accept="image/*" style="padding: 0.5rem; cursor: pointer; color: white;">
+        </div>
+        <div class="image-preview-wrapper" id="add-preview-wrapper" style="display: none;">
+          <img class="admin-image-preview" id="add-preview-img" src="" alt="Image Preview">
+          <button type="button" class="btn-remove-image" id="add-btn-remove">✕ Remove</button>
+        </div>
+        <div class="upload-progress-container" style="display:none;" id="add-upload-telemetry">
+          <div class="upload-progress-text"></div>
+          <div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>
+        </div>
+        
         <label style="font-size: 0.85rem; color: var(--color-gold); font-weight: 600; margin-bottom: 0.5rem; display: block;">Options</label>
         <div class="options-grid">
           <div class="form-group">
@@ -284,10 +317,10 @@
           <label for="correct-answer">Correct Answer</label>
           <select id="correct-answer" required>
             <option value="" disabled selected>Which option is correct?</option>
-            <option value="A">Option A</option>
-            <option value="B">Option B</option>
-            <option value="C">Option C</option>
-            <option value="D">Option D</option>
+            <option value="0">Option A</option>
+            <option value="1">Option B</option>
+            <option value="2">Option C</option>
+            <option value="3">Option D</option>
           </select>
         </div>
 
@@ -426,59 +459,98 @@
     <!-- PANEL 4: Ledger Management -->
     <div id="tab-ledger" class="tab-content">
       <section class="card glassmorphism admin-panel">
-      <div class="panel-icon">📚</div>
-      <h2 class="card-title">Ledger Management</h2>
-      <p class="card-description">Delete quizzes or edit existing questions.</p>
+        <div class="panel-icon">📚</div>
+        <h2 class="card-title">Ledger Management</h2>
+        <p class="card-description">Manage quizzes, backup data, and edit existing questions.</p>
 
-      <div style="margin-bottom: 2rem;">
-        <h3 style="color: var(--color-gold); font-size: 1.1rem; border-bottom: 1px solid var(--border-gold); padding-bottom: 0.5rem; margin-bottom: 1rem;">Manage & Backup Quizzes</h3>
-        <div id="ledger-quiz-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-
-      <hr class="divider">
-
-      <div class="ledger-split-layout">
-        <div class="ledger-left-col">
-          <h3 style="color: var(--color-gold); font-size: 1.1rem; margin-bottom: 1rem;">Edit Questions</h3>
-          <div class="form-group">
-            <label>Select Quiz to Edit</label>
-            <select id="ledger-select-quiz">
-              <option value="" disabled selected>Loading quizzes...</option>
-            </select>
-          </div>
-          <div id="ledger-questions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
-            <!-- Populated by JS -->
-          </div>
-          <button id="btn-add-new-question-ledger" class="btn-secondary btn-block" style="display: none; margin-bottom: 1.5rem; border: 1px dashed var(--color-gold); color: var(--color-gold);">➕ Add New Question to this Quiz</button>
+        <div class="ledger-section-block">
+          <h3 class="ledger-section-title">Manage & Backup Quizzes</h3>
+          <div id="ledger-quiz-list" class="ledger-item-list">
+            </div>
         </div>
 
-        <div class="ledger-right-col">
-          <!-- Hidden Edit Question Form -->
-          <div id="edit-question-container" style="display: none; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px dashed var(--color-gold); border-radius: 6px;">
-            <h4 id="edit-question-title" style="color: var(--color-gold-bright); margin-bottom: 1rem; margin-top: 0;">Edit Selected Question</h4>
-            <form id="form-edit-question">
-              <input type="hidden" id="edit-q-id">
-              <div class="form-group">
-                <label>Question Text</label>
-                <textarea id="edit-q-text" required rows="3"></textarea>
+        <hr class="divider">
+
+        <div class="ledger-split-layout">
+          
+          <div class="ledger-left-col">
+            <h3 class="ledger-section-title">Edit Questions</h3>
+            
+            <div class="form-group">
+              <label>Select Quiz to Edit</label>
+              <select id="ledger-select-quiz">
+                <option value="" disabled selected>Select a Quiz...</option>
+                </select>
+            </div>
+
+            <button id="btn-add-new-question-ledger" class="btn-secondary btn-block btn-dashed">
+              ➕ Add New Question to this Quiz
+            </button>
+            
+            <div class="ledger-map-container">
+              <div id="ledger-question-map" class="question-map-grid">
+                </div>
+            </div>
+
+            <div id="ledger-questions-list" class="ledger-item-list">
               </div>
-              <div class="options-grid">
-                <div class="form-group"><input type="text" id="edit-opt-a" required placeholder="Option A"></div>
-                <div class="form-group"><input type="text" id="edit-opt-b" required placeholder="Option B"></div>
-                <div class="form-group"><input type="text" id="edit-opt-c" required placeholder="Option C"></div>
-                <div class="form-group"><input type="text" id="edit-opt-d" required placeholder="Option D"></div>
-              </div>
-              <div class="form-group" style="margin-top: 1rem;">
-                <label>Correct Answer (Exact Match)</label>
-                <input type="text" id="edit-q-correct" required>
-              </div>
-              <button type="submit" class="btn-primary btn-block" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%); margin-top: 1.5rem;">Save Changes</button>
-            </form>
           </div>
+
+          <div class="ledger-right-col">
+            <div id="edit-question-container" class="edit-panel-card hidden">
+              <h4 id="edit-question-title" class="title-gold-small">Edit Selected Question</h4>
+              
+              <form id="form-edit-question">
+                <input type="hidden" id="edit-q-id">
+                
+                <div class="form-group">
+                  <label>Question Text</label>
+                  <textarea id="edit-q-text" required rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                  <label for="edit-q-image">Update Image (Optional)</label>
+                  <input type="file" id="edit-q-image" accept="image/*" class="file-input">
+                </div>
+                
+                <div class="image-preview-wrapper hidden" id="edit-preview-wrapper">
+                  <img class="admin-image-preview" id="edit-preview-img" src="" alt="Image Preview">
+                  <button type="button" class="btn-remove-image" id="edit-btn-remove">✕ Remove</button>
+                </div>
+                
+                <div class="upload-progress-container hidden" id="edit-upload-telemetry">
+                  <div class="upload-progress-text"></div>
+                  <div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>
+                </div>
+                
+                <div class="options-grid">
+                  <div class="form-group"><input type="text" id="edit-opt-a" required placeholder="Option A"></div>
+                  <div class="form-group"><input type="text" id="edit-opt-b" required placeholder="Option B"></div>
+                  <div class="form-group"><input type="text" id="edit-opt-c" required placeholder="Option C"></div>
+                  <div class="form-group"><input type="text" id="edit-opt-d" required placeholder="Option D"></div>
+                </div>
+                
+                <div class="form-group margin-top-md">
+                  <label>Correct Answer Index</label>
+                  <select id="edit-q-correct" required>
+                    <option value="" disabled selected>Which option is correct?</option>
+                    <option value="0">Option A</option>
+                    <option value="1">Option B</option>
+                    <option value="2">Option C</option>
+                    <option value="3">Option D</option>
+                  </select>
+                </div>
+                
+                <div class="action-buttons-row margin-top-md">
+                  <button type="button" id="btn-cancel-edit" class="btn-secondary" style="flex: 1;">Cancel</button>
+                  <button type="submit" class="btn-primary" style="flex: 2;">Save Changes</button>
+                </div>
+                
+              </form>
+            </div>
+          </div>
+
         </div>
-      </div>
       </section>
     </div>
 
@@ -516,6 +588,7 @@
         <button id="custom-confirm-no" class="btn-secondary" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Cancel</button>
       </div>
     </div>
+  </div>
   </div>
 
 </body>

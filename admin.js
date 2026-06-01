@@ -100,6 +100,35 @@ function showToast(message) {
   setTimeout(() => el.toast.classList.remove('show'), 4000);
 }
 
+async function compressToWebP(file, maxWidth = 1024, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/webp', quality);
+      };
+      img.onerror = (err) => reject(err);
+      img.src = e.target.result;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
+
 // ----------------------------------------------------
 // 4. Global State Loaders
 // ----------------------------------------------------
@@ -191,24 +220,51 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
   const optionB = el.optB.value.trim();
   const optionC = el.optC.value.trim();
   const optionD = el.optD.value.trim();
-  const correctChoice = el.correctAnswer.value; 
+  const correctChoice = parseInt(el.correctAnswer.value, 10); 
+  const imageInput = document.getElementById('q-image');
 
   if (!quizId) return showToast("Select a quiz first.");
-  if (!correctChoice) return showToast("Select the correct answer.");
+  if (isNaN(correctChoice)) return showToast("Select the correct answer.");
 
   const optionsArray = [optionA, optionB, optionC, optionD];
-  let exactCorrectText = "";
-  if (correctChoice === "A") exactCorrectText = optionA;
-  else if (correctChoice === "B") exactCorrectText = optionB;
-  else if (correctChoice === "C") exactCorrectText = optionC;
-  else if (correctChoice === "D") exactCorrectText = optionD;
+  let imageUrl = null;
 
   try {
+    if (imageInput && imageInput.files.length > 0) {
+      const file = imageInput.files[0];
+      const telemetry = document.getElementById('add-upload-telemetry');
+      
+      if (telemetry) {
+        telemetry.style.display = 'block';
+        telemetry.querySelector('.upload-progress-text').textContent = "1/2: Compressing media to WebP...";
+      }
+      
+      const webpBlob = await compressToWebP(file);
+      
+      if (telemetry) {
+        telemetry.querySelector('.upload-progress-text').textContent = "2/2: Transmitting to Cloud...";
+        telemetry.querySelector('.upload-progress-fill').classList.add('animating');
+      }
+
+      const fileName = `q_${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
+      const { data: uploadData, error: uploadError } = await supabaseClient.storage
+        .from('quiz-media')
+        .upload(fileName, webpBlob, { contentType: 'image/webp' });
+        
+      if (telemetry) telemetry.style.display = 'none';
+        
+      if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+      const { data: publicUrlData } = supabaseClient.storage.from('quiz-media').getPublicUrl(fileName);
+      imageUrl = publicUrlData.publicUrl;
+    }
+
     const { error } = await supabaseClient.from('questions').insert([{
       quiz_id: quizId,
       question_text: qText,
       options: optionsArray,
-      correct_option: exactCorrectText
+      correct_index: correctChoice,
+      correct_option: optionsArray[correctChoice],
+      image_url: imageUrl
     }]);
 
     if (error) throw error;
@@ -217,6 +273,20 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
     el.questionText.value = '';
     el.optA.value = ''; el.optB.value = ''; el.optC.value = ''; el.optD.value = '';
     el.correctAnswer.value = '';
+    const imgInput = document.getElementById('q-image');
+    if (imgInput) imgInput.value = '';
+    
+    // Form Resetting for Add Preview
+    const addPreviewWrapper = document.getElementById('add-preview-wrapper');
+    const addPreviewImg = document.getElementById('add-preview-img');
+    if (addPreviewWrapper) addPreviewWrapper.classList.add("hidden");
+    if (addPreviewImg) {
+      if (addPreviewImg.dataset.objectUrl) {
+        URL.revokeObjectURL(addPreviewImg.dataset.objectUrl);
+        delete addPreviewImg.dataset.objectUrl;
+      }
+      addPreviewImg.src = "";
+    }
   } catch (err) {
     showToast("Failed to add question: " + err.message);
   }
@@ -279,11 +349,25 @@ el.formImportCsv.addEventListener('submit', async (e) => {
         const cols = parseCsvLine(lines[i]);
         if (cols.length <= Math.max(qIdx, aIdx, bIdx, cIdx, dIdx, corrIdx)) continue;
 
+        const correctText = cols[corrIdx].trim();
+        const optionsArr = [cols[aIdx], cols[bIdx], cols[cIdx], cols[dIdx]];
+        let correctIndex = optionsArr.findIndex(o => o.trim().toLowerCase() === correctText.toLowerCase());
+        
+        if (correctIndex === -1) {
+           const norm = correctText.toUpperCase();
+           if (norm === "A" || norm === "OPTION A") correctIndex = 0;
+           else if (norm === "B" || norm === "OPTION B") correctIndex = 1;
+           else if (norm === "C" || norm === "OPTION C") correctIndex = 2;
+           else if (norm === "D" || norm === "OPTION D") correctIndex = 3;
+           else correctIndex = 0; // Fallback to option A if unmatchable
+        }
+
         questionsToInsert.push({
           quiz_id: quizId,
           question_text: cols[qIdx],
-          options: [cols[aIdx], cols[bIdx], cols[cIdx], cols[dIdx]],
-          correct_option: cols[corrIdx]
+          options: optionsArr,
+          correct_index: correctIndex,
+          correct_option: optionsArr[correctIndex]
         });
       }
 
@@ -424,7 +508,7 @@ async function generatePrivateLeaderboard(pin) {
   try {
     const { data: sessionData, error: sessionError } = await supabaseClient
       .from('quiz_sessions')
-      .select('id')
+      .select('id, started_at')
       .eq('access_pin', pin)
       .single();
       
@@ -446,7 +530,7 @@ async function generatePrivateLeaderboard(pin) {
           email: r.participant_email || "Guest",
           correctCount: 0,
           totalCount: 0,
-          timeTakenMs: r.time_taken_ms,
+          timeTakenMs: 0,
           isCheater: false,
           answeredQuestions: new Set()
         };
@@ -454,6 +538,9 @@ async function generatePrivateLeaderboard(pin) {
       
       if (userGroups[key].answeredQuestions.has(r.question_id)) return;
       userGroups[key].answeredQuestions.add(r.question_id);
+
+      const serverTimeMs = new Date(r.created_at).getTime() - new Date(sessionData.started_at).getTime();
+      userGroups[key].timeTakenMs = Math.max(userGroups[key].timeTakenMs, serverTimeMs);
 
       if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
       if (r.is_correct) userGroups[key].correctCount++;
@@ -498,7 +585,7 @@ el.btnExportCsv.addEventListener('click', async () => {
   try {
     const { data: sessionData, error: sessionError } = await supabaseClient
       .from('quiz_sessions')
-      .select('id')
+      .select('id, started_at')
       .eq('access_pin', pin)
       .single();
       
@@ -524,7 +611,7 @@ el.btnExportCsv.addEventListener('click', async () => {
           email: r.participant_email || "Guest",
           correctCount: 0,
           totalCount: 0,
-          timeTakenMs: r.time_taken_ms,
+          timeTakenMs: 0,
           isCheater: false,
           answeredQuestions: new Set()
         };
@@ -532,6 +619,9 @@ el.btnExportCsv.addEventListener('click', async () => {
       
       if (userGroups[key].answeredQuestions.has(r.question_id)) return;
       userGroups[key].answeredQuestions.add(r.question_id);
+
+      const serverTimeMs = new Date(r.created_at).getTime() - new Date(sessionData.started_at).getTime();
+      userGroups[key].timeTakenMs = Math.max(userGroups[key].timeTakenMs, serverTimeMs);
 
       if (r.selected_option === "AUTO_SUBMIT_DQ") userGroups[key].isCheater = true;
       if (r.is_correct) userGroups[key].correctCount++;
@@ -582,7 +672,7 @@ window.deleteQuiz = async function(quizId, quizTitle) {
       if (el.ledgerSelectQuiz.value === quizId) {
         el.ledgerSelectQuiz.value = "";
         el.ledgerQuestionsList.innerHTML = "";
-        el.editQuestionContainer.style.display = "none";
+        el.editQuestionContainer.classList.add("hidden");
       }
       
       await loadQuizzes();
@@ -632,7 +722,7 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
   const quizId = el.ledgerSelectQuiz.value;
   if (!quizId) return;
   
-  el.editQuestionContainer.style.display = "none";
+  el.editQuestionContainer.classList.add("hidden");
   el.ledgerQuestionsList.innerHTML = '<span style="color:var(--color-text-secondary);">Loading questions...</span>';
   
   try {
@@ -644,13 +734,31 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
       
     if (error) throw error;
     
+    const questionMap = document.getElementById('ledger-question-map');
+    if (questionMap) {
+      questionMap.innerHTML = '';
+      questionMap.style.display = questions.length > 0 ? 'grid' : 'none';
+    }
+
     el.ledgerQuestionsList.innerHTML = '';
     if (questions.length === 0) {
       el.ledgerQuestionsList.innerHTML = '<span style="color:var(--color-text-secondary);">No questions exist yet.</span>';
     } else {
       questions.forEach((q, index) => {
+        if (questionMap) {
+          const mapBtn = document.createElement('button');
+          mapBtn.className = 'map-btn';
+          mapBtn.textContent = index + 1;
+          mapBtn.addEventListener('click', () => {
+            const target = document.getElementById('ledger-q-' + q.id);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+          questionMap.appendChild(mapBtn);
+        }
+
         const qItem = document.createElement('div');
         qItem.className = 'question-list-item';
+        qItem.id = 'ledger-q-' + q.id;
         qItem.innerHTML = `
           <div class="question-list-content">
             <div style="font-weight: 600; margin-bottom: 0.25rem;" class="q-text-label"></div>
@@ -680,7 +788,7 @@ el.btnAddQuestionLedger.addEventListener('click', () => {
   el.editQuestionTitle.textContent = "Add New Question";
   el.editQId.value = "NEW";
   el.formEditQuestion.reset();
-  el.editQuestionContainer.style.display = "block";
+  el.editQuestionContainer.classList.remove("hidden");
   el.editQuestionContainer.scrollIntoView({ behavior: 'smooth' });
 });
 
@@ -697,7 +805,26 @@ window.openQuestionEditor = function(questionData) {
   el.editOptD.value = opts[3] || "";
   
   el.editQCorrect.value = questionData.correct_option;
-  el.editQuestionContainer.style.display = "block";
+  
+  // Edit Modal Hydration for Image Preview
+  const editPreviewWrapper = document.getElementById('edit-preview-wrapper');
+  const editPreviewImg = document.getElementById('edit-preview-img');
+  const editImageInput = document.getElementById('edit-q-image');
+  
+  if (questionData.image_url) {
+    editPreviewImg.src = questionData.image_url;
+    if (editPreviewImg.dataset.objectUrl) {
+      URL.revokeObjectURL(editPreviewImg.dataset.objectUrl);
+      delete editPreviewImg.dataset.objectUrl;
+    }
+    editPreviewWrapper.classList.remove("hidden");
+  } else {
+    editPreviewImg.src = "";
+    editPreviewWrapper.classList.add("hidden");
+  }
+  if (editImageInput) editImageInput.value = ""; // clear the file input so system knows they keep the old image
+  
+  el.editQuestionContainer.classList.remove("hidden");
   el.editQuestionContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 };
 
@@ -725,39 +852,86 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
   const optB = el.editOptB.value.trim();
   const optC = el.editOptC.value.trim();
   const optD = el.editOptD.value.trim();
-  const correct = el.editQCorrect.value.trim();
-  
+  const correctChoice = parseInt(el.editQCorrect.value, 10);
+  const imageInput = document.getElementById('edit-q-image');
   const optionsArray = [optA, optB, optC, optD];
   
-  if (!optionsArray.includes(correct)) {
-    return showToast("The correct answer must exactly match one of the four options.");
+  if (isNaN(correctChoice)) {
+    return showToast("Please select the correct answer index.");
   }
   
   try {
+    let imageUrl = undefined;
+    if (imageInput && imageInput.files.length > 0) {
+      const file = imageInput.files[0];
+      const telemetry = document.getElementById('edit-upload-telemetry');
+      
+      if (telemetry) {
+        telemetry.style.display = 'block';
+        telemetry.querySelector('.upload-progress-text').textContent = "1/2: Compressing media to WebP...";
+      }
+      
+      const webpBlob = await compressToWebP(file);
+      
+      if (telemetry) {
+        telemetry.querySelector('.upload-progress-text').textContent = "2/2: Transmitting to Cloud...";
+        telemetry.querySelector('.upload-progress-fill').classList.add('animating');
+      }
+
+      const fileName = `q_${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
+      const { error: uploadError } = await supabaseClient.storage.from('quiz-media').upload(fileName, webpBlob, { contentType: 'image/webp' });
+      
+      if (telemetry) telemetry.style.display = 'none';
+      if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+      
+      const { data: publicUrlData } = supabaseClient.storage.from('quiz-media').getPublicUrl(fileName);
+      imageUrl = publicUrlData.publicUrl;
+    }
+
     if (qId === "NEW") {
       const quizId = el.ledgerSelectQuiz.value;
-      const { error } = await supabaseClient.from('questions').insert([{
+      const insertPayload = {
         quiz_id: quizId,
         question_text: qText,
         options: optionsArray,
-        correct_option: correct
-      }]);
+        correct_index: correctChoice,
+        correct_option: optionsArray[correctChoice]
+      };
+      if (imageUrl !== undefined) insertPayload.image_url = imageUrl;
+      
+      const { error } = await supabaseClient.from('questions').insert([insertPayload]);
       if (error) throw error;
       showToast("Question added successfully!");
     } else {
+      const updatePayload = {
+        question_text: qText,
+        options: optionsArray,
+        correct_index: correctChoice,
+        correct_option: optionsArray[correctChoice]
+      };
+      if (imageUrl !== undefined) updatePayload.image_url = imageUrl;
+
       const { error } = await supabaseClient
         .from('questions')
-        .update({
-          question_text: qText,
-          options: optionsArray,
-          correct_option: correct
-        })
+        .update(updatePayload)
         .eq('id', qId);
       if (error) throw error;
       showToast("Question updated successfully!");
     }
     
-    el.editQuestionContainer.style.display = "none";
+    el.editQuestionContainer.classList.add("hidden");
+    const editPreviewWrapper = document.getElementById('edit-preview-wrapper');
+    const editPreviewImg = document.getElementById('edit-preview-img');
+    const editImageInput = document.getElementById('edit-q-image');
+    if (editPreviewWrapper) editPreviewWrapper.classList.add("hidden");
+    if (editPreviewImg) {
+      if (editPreviewImg.dataset.objectUrl) {
+        URL.revokeObjectURL(editPreviewImg.dataset.objectUrl);
+        delete editPreviewImg.dataset.objectUrl;
+      }
+      editPreviewImg.src = '';
+    }
+    if (editImageInput) editImageInput.value = '';
     
     // Refresh the questions list
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
@@ -1004,8 +1178,39 @@ window.openTelemetryModal = function(pin, title) {
 // Initialization
 // ----------------------------------------------------
 function initializeAdminUI() {
-  loadQuizzes();
-  startLiveMonitor();
+  const loginForm = document.getElementById('form-admin-login');
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('admin-email').value.trim();
+      const password = document.getElementById('admin-password').value;
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        
+        showToast("Authentication successful.");
+        document.getElementById('admin-login-container').style.display = 'none';
+        document.getElementById('secure-dashboard-wrapper').style.display = 'block';
+        
+        loadQuizzes();
+        startLiveMonitor();
+      } catch (err) {
+        showToast("Login failed: " + err.message);
+      }
+    });
+  }
+
+  supabaseClient.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      const loginContainer = document.getElementById('admin-login-container');
+      const secureWrapper = document.getElementById('secure-dashboard-wrapper');
+      if (loginContainer) loginContainer.style.display = 'none';
+      if (secureWrapper) secureWrapper.style.display = 'block';
+      loadQuizzes();
+      startLiveMonitor();
+    }
+  });
+
 
   // Initialize Tab Navigation
   const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1097,5 +1302,51 @@ function showCustomConfirm(message) {
     
     btnYes.addEventListener('click', onYes);
     btnNo.addEventListener('click', onNo);
+  });
+}
+
+// Image Preview Handling
+function setupImagePreview(inputId, wrapperId, imgId, btnId) {
+  const input = document.getElementById(inputId);
+  const wrapper = document.getElementById(wrapperId);
+  const img = document.getElementById(imgId);
+  const btn = document.getElementById(btnId);
+
+  if (!input || !wrapper || !img || !btn) return;
+
+  input.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
+      wrapper.classList.remove("hidden");
+      if (img.dataset.objectUrl) {
+        URL.revokeObjectURL(img.dataset.objectUrl);
+      }
+      img.dataset.objectUrl = objectUrl;
+    }
+  });
+
+  btn.addEventListener('click', () => {
+    input.value = "";
+    if (img.dataset.objectUrl) {
+      URL.revokeObjectURL(img.dataset.objectUrl);
+      delete img.dataset.objectUrl;
+    }
+    img.src = "";
+    wrapper.classList.add("hidden");
+  });
+}
+
+setupImagePreview('q-image', 'add-preview-wrapper', 'add-preview-img', 'add-btn-remove');
+setupImagePreview('edit-q-image', 'edit-preview-wrapper', 'edit-preview-img', 'edit-btn-remove');
+
+
+// Cancel Edit Mode Handler
+const btnCancelEdit = document.getElementById('btn-cancel-edit');
+if (btnCancelEdit) {
+  btnCancelEdit.addEventListener('click', () => {
+    document.getElementById('edit-question-container').classList.add('hidden');
+    document.getElementById('form-edit-question').reset();
   });
 }
