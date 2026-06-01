@@ -1091,7 +1091,7 @@ async function loadLeaderboardData() {
     // 1. Fetch all user responses recorded for this specific session
     const { data: responses, error } = await supabaseClient
       .from("user_responses")
-      .select("participant_name, participant_email, participant_guest_id, is_correct, time_taken_ms, selected_option")
+      .select("participant_name, participant_email, participant_guest_id, is_correct, time_taken_ms, selected_option, question_id")
       .eq("session_id", state.sessionId);
 
     if (error) throw error;

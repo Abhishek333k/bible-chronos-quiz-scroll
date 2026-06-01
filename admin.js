@@ -541,7 +541,7 @@ el.btnExportCsv.addEventListener('click', async () => {
     let csvContent = "Rank,Name,Email,Score,Time (ms),Status\n";
     rankings.forEach((player, idx) => {
       const status = player.isCheater ? "DQ (Violations)" : "Completed";
-      csvContent += `${idx + 1},"${player.name}","${player.email}",${player.correctCount}/${player.totalCount},${player.timeTakenMs},"${status}"\n`;
+      csvContent += `${idx + 1},"${player.name}","${player.email}","${player.correctCount} out of ${player.totalCount}",${player.timeTakenMs},"${status}"\n`;
     });
 
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
