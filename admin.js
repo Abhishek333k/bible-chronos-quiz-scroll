@@ -31,6 +31,28 @@ const customStorageAdapter = {
 };
 
 let supabaseClient = null;
+let currentCandidateTokenToKill = null;
+const candidateLastSeen = {};
+
+setInterval(() => {
+  const now = Date.now();
+  for (const guestId in candidateLastSeen) {
+    if (now - candidateLastSeen[guestId] > 60000) {
+      const card = document.getElementById(`candidate-card-${guestId}`);
+      if (card && !card.classList.contains('status-idle')) {
+        card.classList.add('status-idle');
+        const progressLabel = card.querySelector('.candidate-progress-label');
+        if (progressLabel && !progressLabel.querySelector('.idle-text')) {
+          const idleSpan = document.createElement('span');
+          idleSpan.className = 'idle-text';
+          idleSpan.textContent = ' ⚠️ Offline?';
+          progressLabel.appendChild(idleSpan);
+        }
+      }
+    }
+  }
+}, 10000);
+
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
   if (typeof window !== "undefined" && window.supabase) {
     try {
@@ -508,7 +530,7 @@ if (btnCopyTickets) {
     if (chips.length === 0) return showToast("No tickets to copy.");
     const ticketsText = Array.from(chips).map((chip, i) => `Ticket ${i + 1}: ${chip.textContent}`).join('\n');
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(ticketsText).then(() => showToast("All tickets copied to clipboard!"));
+      navigator.clipboard.writeText(ticketsText).then(() => showToast("✅ Tickets copied to clipboard"));
     } else {
       showToast("Clipboard API not available.");
     }
@@ -593,6 +615,7 @@ el.btnHaltExam.addEventListener('click', async () => {
 el.btnPublishResults.addEventListener('click', async () => {
   if (await showCustomConfirm("PUBLISH RESULTS? This will reveal the final leaderboard to all candidates.")) {
     updateSessionStatus('completed');
+    localStorage.removeItem('chronos_host_pin');
   }
 });
 
@@ -1292,6 +1315,7 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
         (payload) => {
           console.log("Telemetry event received:", payload);
           if (payload && payload.payload) {
+            candidateLastSeen[payload.payload.guestId] = Date.now();
             updateTelemetryCard(payload.payload, gridId);
           }
         }
@@ -1325,6 +1349,11 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
   if (card.parentElement !== grid) {
     grid.appendChild(card);
   }
+
+  // Remove idle status if they were idle
+  card.classList.remove('status-idle');
+  const idleText = card.querySelector('.idle-text');
+  if (idleText) idleText.remove();
 
   const answered = data.answered || 0;
   const total = data.total || 0;
@@ -1365,19 +1394,17 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
 
   // Bind Candidate Profile Modal
   card.onclick = () => {
+    currentCandidateTokenToKill = data.token || data.accessToken || data.guestId;
     openCandidateModal(data, progressPercent);
   };
 }
-
-let activeModalCandidateToken = null;
 
 function openCandidateModal(data, progressPercent) {
   const modal = document.getElementById('candidate-profile-modal');
   if (!modal) return;
 
-  activeModalCandidateToken = data.accessToken;
   document.getElementById('modal-candidate-name').textContent = data.name || 'Anonymous';
-  document.getElementById('modal-candidate-ticket').textContent = data.accessToken || 'N/A';
+  document.getElementById('modal-candidate-ticket').textContent = currentCandidateTokenToKill || 'N/A';
   document.getElementById('modal-candidate-score').textContent = `${data.currentScore || 0} / ${data.total || 0}`;
   document.getElementById('modal-candidate-flagged').textContent = data.flagged || 0;
   document.getElementById('modal-candidate-violations').textContent = data.violationCount || 0;
@@ -1393,26 +1420,7 @@ if (btnCloseModal) {
     const modal = document.getElementById('candidate-profile-modal');
     modal.style.display = 'none';
     modal.classList.add('hidden');
-    activeModalCandidateToken = null;
-  };
-}
-
-const btnModalKill = document.getElementById('btn-modal-kill');
-if (btnModalKill) {
-  btnModalKill.onclick = async () => {
-    if (!activeModalCandidateToken) return showToast('No token found for this candidate.');
-    if (await showCustomConfirm(`Terminate participant with ticket ${activeModalCandidateToken}?`)) {
-      try {
-        const { error } = await supabaseClient.from('session_tokens').update({ is_void: true }).eq('access_token', activeModalCandidateToken);
-        if (error) throw error;
-        showToast("Token Terminated Successfully.");
-        const modal = document.getElementById('candidate-profile-modal');
-        modal.style.display = 'none';
-        modal.classList.add('hidden');
-      } catch (err) {
-        showToast("Failed to terminate token: " + err.message);
-      }
-    }
+    currentCandidateTokenToKill = null;
   };
 }
 
@@ -1455,6 +1463,26 @@ async function renderRecentPins() {
 }
 
 function initializeAdminUI() {
+  const btnModalKill = document.getElementById('btn-modal-kill');
+  if (btnModalKill) {
+    btnModalKill.onclick = async () => {
+      if (!currentCandidateTokenToKill) return showToast('No token found for this candidate.');
+      const confirmed = await showCustomConfirm("Are you sure you want to irreversibly terminate this candidate's exam?");
+      if (confirmed) {
+        try {
+          const { error } = await supabaseClient.from('session_tokens').update({ is_void: true }).eq('access_token', currentCandidateTokenToKill);
+          if (error) throw error;
+          showToast("Token Terminated Successfully.");
+          const modal = document.getElementById('candidate-profile-modal');
+          modal.style.display = 'none';
+          modal.classList.add('hidden');
+        } catch (err) {
+          showToast("Failed to terminate token: " + err.message);
+        }
+      }
+    };
+  }
+
   const loginForm = document.getElementById('form-admin-login');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -1577,6 +1605,7 @@ function initializeAdminUI() {
     btnLogout.addEventListener("click", async () => {
       try {
         await supabaseClient.auth.signOut();
+        localStorage.removeItem('chronos_host_pin');
 
         // Hide secure dashboard wrapper
         const secureWrapper = document.getElementById('secure-dashboard-wrapper');

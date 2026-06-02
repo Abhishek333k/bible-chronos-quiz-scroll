@@ -342,7 +342,8 @@ async function renderBooklet() {
   const { data: serverRecords, error } = await supabaseClient
     .from("user_responses")
     .select("question_id, selected_option, is_correct")
-    .eq("access_token", state.accessToken); // Querying by specific token row
+    .eq("session_id", state.sessionId)
+    .eq("participant_guest_id", state.guestId); // Querying by specific candidate
 
   if (error || !serverRecords) {
     container.textContent = "Error synchronizing historic records.";
@@ -748,23 +749,27 @@ function updateFooterCounter() {
 }
 
 function saveDisasterRecovery() {
-  sessionStorage.setItem("inProgressQuiz", JSON.stringify({
-    userAnswers: state.userAnswers,
-    reviewFlags: state.reviewFlags,
-    currentQuestionIndex: state.currentQuestionIndex,
-    guestId: state.guestId,
-    sessionId: state.sessionId,
-    quizId: state.quizId,
-    quizTitle: state.quizTitle,
-    name: state.name,
-    email: state.email,
-    accessToken: state.accessToken,
-    questions: state.questions,
-    isJumbled: state.isJumbled,
-    displayMode: state.displayMode,
-    isAntiCheatEnabled: state.isAntiCheatEnabled,
-    savedTimeMs: state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs
-  }));
+  try {
+    sessionStorage.setItem("inProgressQuiz", JSON.stringify({
+      userAnswers: state.userAnswers,
+      reviewFlags: state.reviewFlags,
+      currentQuestionIndex: state.currentQuestionIndex,
+      guestId: state.guestId,
+      sessionId: state.sessionId,
+      quizId: state.quizId,
+      quizTitle: state.quizTitle,
+      name: state.name,
+      email: state.email,
+      accessToken: state.accessToken,
+      questions: state.questions,
+      isJumbled: state.isJumbled,
+      displayMode: state.displayMode,
+      isAntiCheatEnabled: state.isAntiCheatEnabled,
+      savedTimeMs: state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs
+    }));
+  } catch (e) {
+    console.warn("Storage restricted");
+  }
 }
 
 function sendTelemetry() {
@@ -1659,7 +1664,13 @@ el.btnExitToMenu.addEventListener("click", () => {
 // 13. Disaster Recovery (Auto-Save Restore)
 // ----------------------------------------------------
 function restoreSavedSession() {
-  const recoveryData = sessionStorage.getItem("inProgressQuiz");
+  let recoveryData = null;
+  try {
+    recoveryData = sessionStorage.getItem("inProgressQuiz");
+  } catch (e) {
+    console.warn("Storage restricted");
+  }
+  
   if (recoveryData) {
     try {
       const saved = JSON.parse(recoveryData);
