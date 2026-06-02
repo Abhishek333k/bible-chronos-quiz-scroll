@@ -109,27 +109,39 @@
 
     <!-- View 4: The Quiz (Active) -->
     <section id="view-quiz" class="view">
-      <!-- Fixed Speedrun Header -->
-      <div class="quiz-top-bar">
-        <div class="quiz-info-left">
-          <span class="badge-round scroll-badge">Scroll</span>
-          <div class="a11y-controls">
-            <button id="btn-text-decrease" class="btn-a11y">A-</button>
-            <button id="btn-text-reset" class="btn-a11y">A</button>
-            <button id="btn-text-increase" class="btn-a11y">A+</button>
-          </div>
+      <div class="quiz-header-wrapper">
+        <!-- New Horizontal Bar for Title & Mode -->
+        <div class="quiz-title-bar">
           <span class="quiz-title-display" id="quiz-title-text">Loading Quiz...</span>
         </div>
         
-        <!-- Speedrun Timer -->
-        <div class="timer-container">
-          <span class="timer-label">TIME</span>
-          <span id="chronos-timer" class="timer-digits">00:00.00</span>
-        </div>
+        <div class="quiz-top-bar">
+          <!-- Left Section: Candidate Profile -->
+          <div class="quiz-info-left">
+            <div class="candidate-profile-top">
+              <span id="top-candidate-name" class="candidate-name-top">Candidate</span>
+              <span id="top-candidate-id" class="candidate-id-top">#000000</span>
+            </div>
+          </div>
+          
+          <!-- Center Section: Timer -->
+          <div class="timer-container">
+            <span class="timer-label">TIME</span>
+            <span id="chronos-timer" class="timer-digits">00:00.00</span>
+          </div>
 
-        <div class="quiz-info-right">
-          <span class="progress-label">QUESTION</span>
-          <span id="question-progress-text" class="progress-digits">0/0</span>
+          <!-- Right Section: A11y & Progress -->
+          <div class="quiz-info-right">
+            <div class="a11y-controls">
+              <button id="btn-text-decrease" class="btn-a11y">A-</button>
+              <button id="btn-text-reset" class="btn-a11y">A</button>
+              <button id="btn-text-increase" class="btn-a11y">A+</button>
+            </div>
+            <div class="progress-container-top">
+              <span class="progress-label">Q</span>
+              <span id="question-progress-text" class="progress-digits">0/0</span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -466,7 +466,7 @@ el.authForm.addEventListener("submit", async (e) => {
     // 1. Verify token against the ledger
     const { data: tokenRecord, error: tokenError } = await supabaseClient
       .from('session_tokens')
-      .select('*, quiz_sessions(status, is_jumbled, display_mode, quiz_id, completed_at)')
+      .select('*, quiz_sessions(status, is_jumbled, display_mode, quiz_id, completed_at, quizzes(title))')
       .eq('access_token', token)
       .single();
 
@@ -510,19 +510,20 @@ el.authForm.addEventListener("submit", async (e) => {
     sessionStorage.setItem("participantName", name);
     sessionStorage.setItem("accessToken", token);
     
-    // Fetch Quiz Title details
-    const { data: quiz, error: quizError } = await supabaseClient
-      .from("quizzes")
-      .select("title")
-      .eq("id", state.quizId)
-      .single();
-
-    state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
+    // Extract Quiz Title directly from the joined record to avoid secondary query failures
+    state.quizTitle = (sessionRecord.quizzes && sessionRecord.quizzes.title) ? sessionRecord.quizzes.title : "Sacred Scroll Exam";
 
     // Setup UI summary
     el.summaryName.textContent = name;
     el.summarySessionId.textContent = token;
-    el.quizTitleText.textContent = state.quizTitle;
+    
+    // Also set top-bar profile
+    const topName = document.getElementById("top-candidate-name");
+    const topId = document.getElementById("top-candidate-id");
+    if (topName) topName.textContent = name;
+    if (topId) topId.textContent = "#" + token;
+
+    if (el.quizTitleText) el.quizTitleText.textContent = state.quizTitle;
 
     // Determine Status
     let initialStatus = sessionRecord.status;
@@ -754,6 +755,7 @@ function saveDisasterRecovery() {
     guestId: state.guestId,
     sessionId: state.sessionId,
     quizId: state.quizId,
+    quizTitle: state.quizTitle,
     name: state.name,
     email: state.email,
     accessToken: state.accessToken,
@@ -921,18 +923,150 @@ function initializeQuizUI() {
         <button id="close-wayfinder" style="background: transparent; border: none; color: var(--color-text-secondary); font-size: 1.5rem; cursor: pointer;">✕</button>
       </div>
       <div class="question-map-grid" id="scroll-bottom-map-grid"></div>
+      <div style="margin-top: 2rem;">
+        <button id="btn-final-submit" class="btn-primary btn-block">Confirm Submission</button>
+      </div>
     `;
     document.body.appendChild(bottomMapContainer);
     
     updateQuestionMap();
     
-    // Toggle Modal
-    fab.addEventListener('click', () => {
-      bottomMapContainer.classList.toggle('hidden');
+    // Toggle Modal & Draggable Logic
+    let isDragging = false;
+    let dragStartX, dragStartY;
+    let initialX, initialY;
+    let currentX = 0, currentY = 0;
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+
+    function setTranslate(xPos, yPos, el) {
+      el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+    }
+
+    function dragStart(e) {
+      isDragging = false;
+      bottomMapContainer.classList.add('hidden'); // Close modal if they start dragging the bubble
+      
+      const rect = fab.getBoundingClientRect();
+      const originX = rect.left - currentX;
+      const originY = rect.top - currentY;
+      
+      // Calculate boundaries based on screen size (padding of 10px)
+      minX = -(originX - 10);
+      maxX = window.innerWidth - rect.width - originX - 10;
+      minY = -(originY - 10);
+      maxY = window.innerHeight - rect.height - originY - 10;
+
+      const clientX = e.type === "touchstart" ? e.touches[0].clientX : e.clientX;
+      const clientY = e.type === "touchstart" ? e.touches[0].clientY : e.clientY;
+      initialX = clientX - currentX;
+      initialY = clientY - currentY;
+      dragStartX = clientX;
+      dragStartY = clientY;
+      
+      fab.style.transition = 'none'; // Disable transition for instant finger follow
+    }
+
+    function drag(e) {
+      const clientX = e.type === "touchmove" ? e.touches[0].clientX : e.clientX;
+      const clientY = e.type === "touchmove" ? e.touches[0].clientY : e.clientY;
+      
+      // Threshold to detect actual drag instead of a sloppy tap
+      if (Math.abs(clientX - dragStartX) > 8 || Math.abs(clientY - dragStartY) > 8) {
+        isDragging = true;
+      }
+      
+      if (isDragging) {
+        if(e.cancelable) e.preventDefault(); // Prevent scrolling while dragging
+        
+        let targetX = clientX - initialX;
+        let targetY = clientY - initialY;
+        
+        // Clamp to screen boundaries
+        currentX = Math.max(minX, Math.min(maxX, targetX));
+        currentY = Math.max(minY, Math.min(maxY, targetY));
+        
+        setTranslate(currentX, currentY, fab);
+      }
+    }
+
+    function dragEnd(e) {
+      if (!isDragging) {
+        // It was a click
+        if (bottomMapContainer.classList.contains('hidden')) {
+          const rect = fab.getBoundingClientRect();
+          const modalWidth = Math.min(320, window.innerWidth - 20);
+          
+          bottomMapContainer.style.width = modalWidth + 'px';
+          bottomMapContainer.style.maxWidth = 'none'; // Override CSS max-width
+          bottomMapContainer.style.bottom = 'auto';
+          bottomMapContainer.style.top = 'auto';
+          bottomMapContainer.style.left = 'auto';
+          bottomMapContainer.style.right = 'auto';
+          
+          // Anchor horizontally with overflow protection
+          if (rect.left > window.innerWidth / 2) {
+            let rightPos = window.innerWidth - rect.right;
+            rightPos = Math.max(10, rightPos);
+            if (rightPos + modalWidth > window.innerWidth - 10) {
+              rightPos = window.innerWidth - modalWidth - 10;
+            }
+            bottomMapContainer.style.right = rightPos + 'px';
+          } else {
+            let leftPos = rect.left;
+            leftPos = Math.max(10, leftPos);
+            if (leftPos + modalWidth > window.innerWidth - 10) {
+              leftPos = window.innerWidth - modalWidth - 10;
+            }
+            bottomMapContainer.style.left = leftPos + 'px';
+          }
+          
+          // Anchor vertically with overflow protection
+          if (rect.top > window.innerHeight / 2) {
+            bottomMapContainer.style.bottom = Math.max(10, window.innerHeight - rect.top + 10) + 'px';
+          } else {
+            bottomMapContainer.style.top = Math.max(10, rect.bottom + 10) + 'px';
+          }
+        }
+        bottomMapContainer.classList.remove('hidden');
+      } else {
+        // Snap to nearest edge
+        fab.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        const rect = fab.getBoundingClientRect();
+        const absoluteCenterX = rect.left + (rect.width / 2);
+        
+        if (absoluteCenterX < window.innerWidth / 2) {
+          currentX = minX; // Snap to Left Edge
+        } else {
+          currentX = maxX; // Snap to Right Edge
+        }
+        setTranslate(currentX, currentY, fab);
+      }
+      isDragging = false;
+    }
+
+    fab.addEventListener('touchstart', dragStart, { passive: true });
+    fab.addEventListener('touchend', dragEnd, { passive: true });
+    fab.addEventListener('touchmove', drag, { passive: false });
+
+    fab.addEventListener('mousedown', (e) => {
+      dragStart(e);
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', function mouseUpListener(ev) {
+        document.removeEventListener('mousemove', drag);
+        document.removeEventListener('mouseup', mouseUpListener);
+        dragEnd(ev);
+      });
     });
     
     document.getElementById('close-wayfinder').addEventListener('click', () => {
       bottomMapContainer.classList.add('hidden');
+    });
+    
+    document.getElementById('btn-final-submit').addEventListener('click', async () => {
+      bottomMapContainer.classList.add('hidden');
+      if (await showCustomConfirm("Are you sure you want to submit the exam?")) {
+        submitQuiz(false);
+      }
     });
     
     // Toggle layout padding (no longer need extra padding at bottom)
@@ -1145,9 +1279,10 @@ el.btnPrevQuestion.addEventListener("click", () => {
   }
 });
 
-el.btnSubmitScroll.addEventListener("click", async () => {
-  if (await showCustomConfirm("Are you sure you want to submit the exam?")) {
-    submitQuiz(false);
+el.btnSubmitScroll.addEventListener("click", () => {
+  const bottomMapContainer = document.getElementById('wayfinder-modal');
+  if (bottomMapContainer) {
+    bottomMapContainer.classList.remove('hidden');
   }
 });
 
@@ -1535,6 +1670,7 @@ function restoreSavedSession() {
       state.guestId = saved.guestId;
       state.sessionId = saved.sessionId;
       state.quizId = saved.quizId;
+      state.quizTitle = saved.quizTitle || "Sacred Scroll Exam";
       state.name = saved.name;
       state.email = saved.email;
       state.accessToken = saved.accessToken || sessionStorage.getItem("accessToken");
@@ -1546,6 +1682,14 @@ function restoreSavedSession() {
       // Update UI summary
       el.summaryName.textContent = state.name;
       
+      // Also set top-bar profile
+      const topName = document.getElementById("top-candidate-name");
+      const topId = document.getElementById("top-candidate-id");
+      if (topName) topName.textContent = state.name;
+      if (topId) topId.textContent = "#" + state.accessToken;
+      
+      if (el.quizTitleText) el.quizTitleText.textContent = state.quizTitle;
+
       // Resubscribe to realtime
       subscribeToSession();
       
