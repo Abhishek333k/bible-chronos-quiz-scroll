@@ -10,11 +10,36 @@
 const SUPABASE_URL = "https://ktdvbbouymbphuijkopl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0ZHZiYm91eW1icGh1aWprb3BsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyMjA4MzUsImV4cCI6MjA5NTc5NjgzNX0.fFCvVMsonXmaRQOJ2_fwaV4lH-VCMfd9K8kXJ7toycQ";
 
+const customStorageAdapter = {
+  getItem: (key) => {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) { }
+  },
+  removeItem: (key) => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) { }
+  }
+};
+
 let supabaseClient = null;
 if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY") {
   if (typeof window !== "undefined" && window.supabase) {
     try {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          storage: customStorageAdapter,
+          persistSession: true
+        }
+      });
     } catch (e) {
       console.error("Failed to initialize Supabase client:", e);
     }
@@ -46,7 +71,7 @@ const el = {
   // Panel 1: Scriptorium
   formCreateQuiz: document.getElementById('form-create-quiz'),
   quizTitleInput: document.getElementById('quiz-title'),
-  
+
   formAddQuestion: document.getElementById('form-add-question'),
   selectQuizAdd: document.getElementById('select-quiz-add'),
   questionText: document.getElementById('question-text'),
@@ -229,7 +254,7 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
   const optionB = el.optB.value.trim();
   const optionC = el.optC.value.trim();
   const optionD = el.optD.value.trim();
-  const correctChoice = parseInt(el.correctAnswer.value, 10); 
+  const correctChoice = parseInt(el.correctAnswer.value, 10);
   const imageInput = document.getElementById('q-image');
 
   if (!quizId) return showToast("Select a quiz first.");
@@ -242,14 +267,14 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
     if (imageInput && imageInput.files.length > 0) {
       const file = imageInput.files[0];
       const telemetry = document.getElementById('add-upload-telemetry');
-      
+
       if (telemetry) {
         telemetry.style.display = 'block';
         telemetry.querySelector('.upload-progress-text').textContent = "1/2: Compressing media to WebP...";
       }
-      
+
       const webpBlob = await compressToWebP(file);
-      
+
       if (telemetry) {
         telemetry.querySelector('.upload-progress-text').textContent = "2/2: Transmitting to Cloud...";
         telemetry.querySelector('.upload-progress-fill').classList.add('animating');
@@ -259,9 +284,9 @@ el.formAddQuestion.addEventListener('submit', async (e) => {
       const { data: uploadData, error: uploadError } = await supabaseClient.storage
         .from('quiz-media')
         .upload(fileName, webpBlob, { contentType: 'image/webp' });
-        
+
       if (telemetry) telemetry.style.display = 'none';
-        
+
       if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
       const { data: publicUrlData } = supabaseClient.storage.from('quiz-media').getPublicUrl(fileName);
       imageUrl = publicUrlData.publicUrl;
@@ -330,16 +355,16 @@ el.formImportCsv.addEventListener('submit', async (e) => {
       };
 
       const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
-      
+
       const qIdx = headers.findIndex(h => h.includes("question"));
       const aIdx = headers.findIndex(h => h === "option a" || h === "a");
       const bIdx = headers.findIndex(h => h === "option b" || h === "b");
       const cIdx = headers.findIndex(h => h === "option c" || h === "c");
       const dIdx = headers.findIndex(h => h === "option d" || h === "d");
       const corrIdx = headers.findIndex(h => h.includes("correct option") || h.includes("correct answer"));
-      
+
       if (qIdx === -1 || aIdx === -1 || bIdx === -1 || cIdx === -1 || dIdx === -1 || corrIdx === -1) {
-         throw new Error("Missing required headers in CSV.");
+        throw new Error("Missing required headers in CSV.");
       }
 
       const questionsToInsert = [];
@@ -350,14 +375,14 @@ el.formImportCsv.addEventListener('submit', async (e) => {
         const correctText = cols[corrIdx].trim();
         const optionsArr = [cols[aIdx], cols[bIdx], cols[cIdx], cols[dIdx]];
         let correctIndex = optionsArr.findIndex(o => o.trim().toLowerCase() === correctText.toLowerCase());
-        
+
         if (correctIndex === -1) {
-           const norm = correctText.toUpperCase();
-           if (norm === "A" || norm === "OPTION A") correctIndex = 0;
-           else if (norm === "B" || norm === "OPTION B") correctIndex = 1;
-           else if (norm === "C" || norm === "OPTION C") correctIndex = 2;
-           else if (norm === "D" || norm === "OPTION D") correctIndex = 3;
-           else correctIndex = 0; // Fallback to option A if unmatchable
+          const norm = correctText.toUpperCase();
+          if (norm === "A" || norm === "OPTION A") correctIndex = 0;
+          else if (norm === "B" || norm === "OPTION B") correctIndex = 1;
+          else if (norm === "C" || norm === "OPTION C") correctIndex = 2;
+          else if (norm === "D" || norm === "OPTION D") correctIndex = 3;
+          else correctIndex = 0; // Fallback to option A if unmatchable
         }
 
         questionsToInsert.push({
@@ -393,16 +418,21 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
   if (!supabaseClient) return;
 
   const quizId = el.selectQuizSession.value;
-  if (!quizId) return showToast("Select a quiz to generate a session.");
+  const numTickets = parseInt(document.getElementById('new-session-tickets').value, 10);
 
-  // Generate 6-Digit Random PIN
+  if (!quizId || isNaN(numTickets)) {
+    return showToast("Please select a quiz and specify the number of tickets.");
+  }
+
+  // Generate a primary session PIN for general reference (optional but kept for backwards compatibility)
   const accessPin = Math.floor(100000 + Math.random() * 900000).toString();
 
   try {
     const isJumbled = el.sessionIsJumbled.checked;
     const displayMode = el.sessionDisplayMode.value;
 
-    const { error } = await supabaseClient
+    // 1. Create the session
+    const { data: sessionData, error: sessionError } = await supabaseClient
       .from('quiz_sessions')
       .insert([{
         quiz_id: quizId,
@@ -411,32 +441,97 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
         is_jumbled: isJumbled,
         display_mode: displayMode,
         is_anti_cheat_enabled: el.sessionAntiCheat ? el.sessionAntiCheat.checked : true
-      }]);
+      }])
+      .select()
+      .single();
 
-    if (error) throw error;
+    if (sessionError) throw sessionError;
+
+    // 2. Generate N unique 6-digit tokens
+    const tokens = [];
+    const usedPins = new Set();
+    while (tokens.length < numTickets) {
+      const pin = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+      if (!usedPins.has(pin)) {
+        usedPins.add(pin);
+        tokens.push({
+          session_id: sessionData.id,
+          access_token: pin,
+          is_claimed: false
+        });
+      }
+    }
+
+    // 3. Bulk insert tokens into the ledger
+    const { error: tokenError } = await supabaseClient
+      .from('session_tokens')
+      .insert(tokens);
+
+    if (tokenError) throw tokenError;
 
     el.displayPin.textContent = accessPin;
+    const displayTicketsArea = document.getElementById('display-tickets');
+    if (displayTicketsArea) {
+      displayTicketsArea.innerHTML = tokens.map(t => `<span class="ticket-chip" onclick="copyIndividualTicket('${t.access_token}')" style="cursor: pointer;" title="Click to copy">${t.access_token}</span>`).join('');
+    }
     el.sessionPinContainer.style.display = 'block';
     el.liveSessionPin.value = accessPin;
-    showToast("New Session Generated!");
+
+    // Save to multi-pin recovery
+    let savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+    if (!savedPins.includes(accessPin)) {
+      savedPins.push(accessPin);
+      if (savedPins.length > 5) savedPins.shift(); // Keep last 5
+      localStorage.setItem('chronos_host_pins', JSON.stringify(savedPins));
+    }
+    renderRecentPins();
+
+    showToast(`Session created successfully with ${numTickets} access tickets!`);
     syncTelemetrySubscription(accessPin);
   } catch (err) {
     showToast("Failed to generate session: " + err.message);
   }
 });
 
-el.btnCopyPin.addEventListener('click', () => {
-  const pin = el.displayPin.textContent;
+window.copyIndividualTicket = function (token) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(pin).then(() => showToast("PIN copied!"));
+    navigator.clipboard.writeText(token).then(() => showToast(`Ticket ${token} copied to clipboard!`));
   } else {
     showToast("Clipboard API not available.");
   }
-});
+};
+
+const btnCopyTickets = document.getElementById('btn-copy-tickets');
+if (btnCopyTickets) {
+  btnCopyTickets.addEventListener('click', () => {
+    const chips = document.querySelectorAll('.ticket-chip');
+    if (chips.length === 0) return showToast("No tickets to copy.");
+    const ticketsText = Array.from(chips).map((chip, i) => `Ticket ${i + 1}: ${chip.textContent}`).join('\n');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(ticketsText).then(() => showToast("All tickets copied to clipboard!"));
+    } else {
+      showToast("Clipboard API not available.");
+    }
+  });
+}
 
 // ----------------------------------------------------
 // 7. Panel 3: Live Operations (The Switch)
 // ----------------------------------------------------
+
+function syncAdminPanelButtons(status) {
+  el.btnStartExam.style.display = 'none';
+  el.btnHaltExam.style.display = 'none';
+  el.btnPublishResults.style.display = 'none';
+
+  if (status === 'waiting') {
+    el.btnStartExam.style.display = 'block';
+  } else if (status === 'in_progress') {
+    el.btnHaltExam.style.display = 'block';
+  } else if (status === 'evaluation') {
+    el.btnPublishResults.style.display = 'block';
+  }
+}
 
 async function updateSessionStatus(status) {
   if (!supabaseClient) return;
@@ -476,6 +571,8 @@ async function updateSessionStatus(status) {
       showToast(`✅ EXAM COMPLETED for PIN ${pin}!`);
       if (el.btnExportCsv) el.btnExportCsv.style.display = 'block';
     }
+
+    syncAdminPanelButtons(status);
   } catch (err) {
     showToast(`Failed to update status: ` + err.message);
   }
@@ -490,16 +587,12 @@ el.btnStartExam.addEventListener('click', async () => {
 el.btnHaltExam.addEventListener('click', async () => {
   if (await showCustomConfirm("HALT the exam? This will securely lock all candidate screens for proctor evaluation.")) {
     updateSessionStatus('evaluation');
-    el.btnHaltExam.style.display = 'none';
-    el.btnPublishResults.style.display = 'block';
   }
 });
 
 el.btnPublishResults.addEventListener('click', async () => {
   if (await showCustomConfirm("PUBLISH RESULTS? This will reveal the final leaderboard to all candidates.")) {
     updateSessionStatus('completed');
-    el.btnPublishResults.style.display = 'none';
-    el.btnHaltExam.style.display = 'block';
   }
 });
 
@@ -510,7 +603,7 @@ async function generatePrivateLeaderboard(pin) {
       .select('id, started_at')
       .eq('access_pin', pin)
       .single();
-      
+
     if (sessionError || !sessionData) return;
 
     let responses = [];
@@ -542,9 +635,10 @@ async function generatePrivateLeaderboard(pin) {
 
     const userGroups = {};
     responses.forEach(r => {
-      const key = r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
+      const key = r.access_token || r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
       if (!userGroups[key]) {
         userGroups[key] = {
+          access_token: r.access_token,
           name: r.participant_name,
           email: r.participant_email || "Guest",
           correctCount: 0,
@@ -554,7 +648,7 @@ async function generatePrivateLeaderboard(pin) {
           answeredQuestions: new Set()
         };
       }
-      
+
       if (userGroups[key].answeredQuestions.has(r.question_id)) return;
       userGroups[key].answeredQuestions.add(r.question_id);
 
@@ -583,12 +677,15 @@ async function generatePrivateLeaderboard(pin) {
       const tr = document.createElement("tr");
       const status = player.isCheater ? `<span style="color:#ef4444;">DQ (Violations)</span>` : `<span style="color:#10b981;">Active</span>`;
       const timeSec = (player.timeTakenMs / 1000).toFixed(1);
+      const tokenDisplay = player.access_token ? `<span class="candidate-flagged">${player.access_token}</span>` : 'N/A';
       tr.innerHTML = `
+        <td style="padding: 0.5rem;">${tokenDisplay}</td>
         <td style="padding: 0.5rem;">${idx + 1}</td>
         <td style="padding: 0.5rem;"><strong class="player-name-val"></strong></td>
         <td style="padding: 0.5rem;">${player.correctCount}/${player.totalCount}</td>
         <td style="padding: 0.5rem; font-family: monospace;">${timeSec}s</td>
         <td style="padding: 0.5rem;">${status}</td>
+        <td style="padding: 0.5rem;"><button class="btn-danger btn-kill-token" data-token="${player.access_token || ''}">Terminate</button></td>
       `;
       tr.querySelector('.player-name-val').textContent = player.name;
       el.privateLeaderboardTbody.appendChild(tr);
@@ -597,6 +694,22 @@ async function generatePrivateLeaderboard(pin) {
     console.error("Private leaderboard error:", err);
   }
 }
+
+el.privateLeaderboardTbody.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('btn-kill-token')) {
+    const token = e.target.getAttribute('data-token');
+    if (!token) return showToast('No token found to terminate.');
+    if (await showCustomConfirm(`Terminate participant with ticket ${token}?`)) {
+      try {
+        const { error } = await supabaseClient.from('session_tokens').update({ is_void: true }).eq('access_token', token);
+        if (error) throw error;
+        showToast("Token Terminated.");
+      } catch (err) {
+        showToast("Failed to terminate token: " + err.message);
+      }
+    }
+  }
+});
 
 el.btnExportCsv.addEventListener('click', async () => {
   const pin = el.liveSessionPin.value.trim();
@@ -608,7 +721,7 @@ el.btnExportCsv.addEventListener('click', async () => {
       .select('id, started_at')
       .eq('access_pin', pin)
       .single();
-      
+
     if (sessionError || !sessionData) throw new Error("Could not find session by PIN.");
 
     let responses = [];
@@ -656,7 +769,7 @@ el.btnExportCsv.addEventListener('click', async () => {
           answeredQuestions: new Set()
         };
       }
-      
+
       if (userGroups[key].answeredQuestions.has(r.question_id)) return;
       userGroups[key].answeredQuestions.add(r.question_id);
 
@@ -701,20 +814,20 @@ el.btnExportCsv.addEventListener('click', async () => {
 // ----------------------------------------------------
 
 // Exposed globally so the onclick in loadQuizzes() can access it
-window.deleteQuiz = async function(quizId, quizTitle) {
+window.deleteQuiz = async function (quizId, quizTitle) {
   if (await showCustomConfirm(`CRITICAL WARNING: Are you sure you want to delete "${quizTitle}"? This will cascade and delete all associated questions and sessions.`)) {
     try {
       const { error } = await supabaseClient.from('quizzes').delete().eq('id', quizId);
       if (error) throw error;
       showToast(`Quiz "${quizTitle}" deleted successfully.`);
-      
+
       // If we were editing this quiz, close the edit window
       if (el.ledgerSelectQuiz.value === quizId) {
         el.ledgerSelectQuiz.value = "";
         el.ledgerQuestionsList.innerHTML = "";
         el.editQuestionContainer.classList.add("hidden");
       }
-      
+
       await loadQuizzes();
     } catch (err) {
       showToast("Failed to delete quiz: " + err.message);
@@ -722,7 +835,7 @@ window.deleteQuiz = async function(quizId, quizTitle) {
   }
 };
 
-window.backupQuiz = async function(quizId, quizTitle) {
+window.backupQuiz = async function (quizId, quizTitle) {
   try {
     const { data: questions, error } = await supabaseClient
       .from('questions')
@@ -731,7 +844,7 @@ window.backupQuiz = async function(quizId, quizTitle) {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    
+
     if (!questions || questions.length === 0) {
       return showToast("No questions in this quiz to backup.");
     }
@@ -761,19 +874,19 @@ window.backupQuiz = async function(quizId, quizTitle) {
 el.ledgerSelectQuiz.addEventListener('change', async () => {
   const quizId = el.ledgerSelectQuiz.value;
   if (!quizId) return;
-  
+
   el.editQuestionContainer.classList.add("hidden");
   el.ledgerQuestionsList.innerHTML = '<span style="color:var(--color-text-secondary);">Loading questions...</span>';
-  
+
   try {
     const { data: questions, error } = await supabaseClient
       .from('questions')
       .select('*')
       .eq('quiz_id', quizId)
       .order('created_at', { ascending: true });
-      
+
     if (error) throw error;
-    
+
     const questionMap = document.getElementById('ledger-question-map');
     if (questionMap) {
       questionMap.innerHTML = '';
@@ -818,7 +931,7 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
     }
 
     el.btnAddQuestionLedger.style.display = 'block';
-    
+
   } catch (err) {
     showToast("Failed to load questions: " + err.message);
   }
@@ -832,18 +945,18 @@ el.btnAddQuestionLedger.addEventListener('click', () => {
   el.editQuestionContainer.scrollIntoView({ behavior: 'smooth' });
 });
 
-window.openQuestionEditor = function(questionData) {
+window.openQuestionEditor = function (questionData) {
   el.editQuestionTitle.textContent = "Edit Selected Question";
   el.editQId.value = questionData.id;
   el.editQText.value = questionData.question_text;
-  
+
   // Populate options
   const opts = questionData.options || ["", "", "", ""];
   el.editOptA.value = opts[0] || "";
   el.editOptB.value = opts[1] || "";
   el.editOptC.value = opts[2] || "";
   el.editOptD.value = opts[3] || "";
-  
+
   let selectIndex = "";
   if (questionData.correct_index !== null && questionData.correct_index !== undefined && questionData.correct_index !== "") {
     selectIndex = String(questionData.correct_index);
@@ -855,12 +968,12 @@ window.openQuestionEditor = function(questionData) {
     }
   }
   el.editQCorrect.value = selectIndex;
-  
+
   // Edit Modal Hydration for Image Preview
   const editPreviewWrapper = document.getElementById('edit-preview-wrapper');
   const editPreviewImg = document.getElementById('edit-preview-img');
   const editImageInput = document.getElementById('edit-q-image');
-  
+
   if (questionData.image_url) {
     editPreviewImg.src = questionData.image_url;
     if (editPreviewImg.dataset.objectUrl) {
@@ -873,12 +986,12 @@ window.openQuestionEditor = function(questionData) {
     editPreviewWrapper.classList.add("hidden");
   }
   if (editImageInput) editImageInput.value = ""; // clear the file input so system knows they keep the old image
-  
+
   el.editQuestionContainer.classList.remove("hidden");
   el.editQuestionContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 };
 
-window.deleteQuestion = async function(questionId) {
+window.deleteQuestion = async function (questionId) {
   if (!(await showCustomConfirm("Are you sure you want to delete this question? This action cannot be undone."))) return;
   try {
     const { error } = await supabaseClient
@@ -895,7 +1008,7 @@ window.deleteQuestion = async function(questionId) {
 
 el.formEditQuestion.addEventListener('submit', async (e) => {
   e.preventDefault();
-  
+
   const qId = el.editQId.value;
   const qText = el.editQText.value.trim();
   const optA = el.editOptA.value.trim();
@@ -905,24 +1018,24 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
   const correctChoice = parseInt(el.editQCorrect.value, 10);
   const imageInput = document.getElementById('edit-q-image');
   const optionsArray = [optA, optB, optC, optD];
-  
+
   if (isNaN(correctChoice)) {
     return showToast("Please select the correct answer index.");
   }
-  
+
   try {
     let imageUrl = undefined;
     if (imageInput && imageInput.files.length > 0) {
       const file = imageInput.files[0];
       const telemetry = document.getElementById('edit-upload-telemetry');
-      
+
       if (telemetry) {
         telemetry.style.display = 'block';
         telemetry.querySelector('.upload-progress-text').textContent = "1/2: Compressing media to WebP...";
       }
-      
+
       const webpBlob = await compressToWebP(file);
-      
+
       if (telemetry) {
         telemetry.querySelector('.upload-progress-text').textContent = "2/2: Transmitting to Cloud...";
         telemetry.querySelector('.upload-progress-fill').classList.add('animating');
@@ -930,10 +1043,10 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
 
       const fileName = `q_${Date.now()}_${Math.random().toString(36).substring(7)}.webp`;
       const { error: uploadError } = await supabaseClient.storage.from('quiz-media').upload(fileName, webpBlob, { contentType: 'image/webp' });
-      
+
       if (telemetry) telemetry.style.display = 'none';
       if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
-      
+
       const { data: publicUrlData } = supabaseClient.storage.from('quiz-media').getPublicUrl(fileName);
       imageUrl = publicUrlData.publicUrl;
     }
@@ -948,7 +1061,7 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
         correct_option: optionsArray[correctChoice]
       };
       if (imageUrl !== undefined) insertPayload.image_url = imageUrl;
-      
+
       const { error } = await supabaseClient.from('questions').insert([insertPayload]);
       if (error) throw error;
       showToast("Question added successfully!");
@@ -968,15 +1081,15 @@ el.formEditQuestion.addEventListener('submit', async (e) => {
       if (error) throw error;
       showToast("Question updated successfully!");
     }
-    
+
     el.editQuestionContainer.classList.add("hidden");
     document.getElementById('edit-preview-wrapper').classList.add('hidden');
     document.getElementById('edit-preview-img').src = '';
     document.getElementById('edit-q-image').value = '';
-    
+
     // Refresh the questions list
     el.ledgerSelectQuiz.dispatchEvent(new Event('change'));
-  } catch(err) {
+  } catch (err) {
     showToast("Failed to save question: " + err.message);
   }
 });
@@ -1041,7 +1154,7 @@ async function loadActiveSessions() {
       }
 
       const quizTitle = session.quizzes ? session.quizzes.title : 'Unknown Quiz';
-      
+
       const sessionItem = document.createElement('div');
       sessionItem.style.background = 'rgba(0,0,0,0.4)';
       sessionItem.style.padding = '0.75rem 1rem';
@@ -1051,7 +1164,7 @@ async function loadActiveSessions() {
       sessionItem.style.justifyContent = 'space-between';
       sessionItem.style.alignItems = 'center';
       sessionItem.style.marginBottom = '0.75rem';
-      
+
       sessionItem.innerHTML = `
         <div>
           <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 0.2rem;" class="quiz-title-label"></div>
@@ -1065,10 +1178,10 @@ async function loadActiveSessions() {
           <button class="btn-secondary btn-monitor" style="padding: 0.5rem 1rem; font-size: 0.85rem; border-color: var(--color-gold); color: var(--color-gold);">👁️ Monitor</button>
         </div>
       `;
-      
+
       sessionItem.querySelector('.quiz-title-label').textContent = quizTitle;
       sessionItem.querySelector('.btn-monitor').addEventListener('click', () => openTelemetryModal(session.access_pin, quizTitle));
-      
+
       listEl.appendChild(sessionItem);
 
       // Start local ticking
@@ -1076,7 +1189,7 @@ async function loadActiveSessions() {
       if (session.started_at) {
         const startTime = new Date(session.started_at).getTime();
         const elTimer = sessionItem.querySelector(`#monitor-timer-${session.id}`);
-        
+
         const tick = () => {
           const deltaMs = Date.now() - startTime;
           if (deltaMs < 0) return;
@@ -1116,7 +1229,7 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
     await currentTelemetryChannel.unsubscribe();
     currentTelemetryChannel = null;
   }
-  
+
   const grid = document.getElementById(gridId);
   if (!pin || !/^\d{6}$/.test(pin)) {
     if (grid) {
@@ -1132,7 +1245,7 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
   try {
     const { data: session, error } = await supabaseClient
       .from('quiz_sessions')
-      .select('id')
+      .select('id, status')
       .eq('access_pin', pin)
       .single();
 
@@ -1143,6 +1256,32 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
       }
       return;
     }
+
+    // Load Session Tokens for Recovery
+    const recoveryContainer = document.getElementById('recovery-tickets-container');
+    const recoveryList = document.getElementById('recovery-tickets-list');
+    if (recoveryContainer && recoveryList) {
+      const { data: tokensData, error: tokensError } = await supabaseClient
+        .from('session_tokens')
+        .select('access_token, is_claimed, is_void')
+        .eq('session_id', session.id);
+
+      if (!tokensError && tokensData && tokensData.length > 0) {
+        recoveryList.innerHTML = tokensData.map(t => {
+          let style = "cursor: pointer;";
+          if (t.is_void) style += " text-decoration: line-through; opacity: 0.5; border-color: red;";
+          else if (t.is_claimed) style += " opacity: 0.6; border-style: dashed;";
+
+          return `<span class="ticket-chip" onclick="copyIndividualTicket('${t.access_token}')" style="${style}" title="${t.is_void ? 'Terminated' : (t.is_claimed ? 'Claimed - Click to copy anyway' : 'Available - Click to copy')}">${t.access_token}</span>`;
+        }).join('');
+        recoveryContainer.style.display = 'block';
+      } else {
+        recoveryContainer.style.display = 'none';
+      }
+    }
+
+    // strictly clamp the Admin UI buttons to the database state
+    syncAdminPanelButtons(session.status);
 
     console.log("Subscribing to telemetry for session:", session.id);
     currentTelemetryChannel = supabaseClient
@@ -1223,12 +1362,64 @@ function updateTelemetryCard(data, gridId = "live-telemetry-grid") {
     </div>
     <div class="candidate-live-score">Score: ${currentScore} / ${total}</div>
   `;
+
+  // Bind Candidate Profile Modal
+  card.onclick = () => {
+    openCandidateModal(data, progressPercent);
+  };
 }
 
-window.openTelemetryModal = function(pin, title) {
+let activeModalCandidateToken = null;
+
+function openCandidateModal(data, progressPercent) {
+  const modal = document.getElementById('candidate-profile-modal');
+  if (!modal) return;
+
+  activeModalCandidateToken = data.accessToken;
+  document.getElementById('modal-candidate-name').textContent = data.name || 'Anonymous';
+  document.getElementById('modal-candidate-ticket').textContent = data.accessToken || 'N/A';
+  document.getElementById('modal-candidate-score').textContent = `${data.currentScore || 0} / ${data.total || 0}`;
+  document.getElementById('modal-candidate-flagged').textContent = data.flagged || 0;
+  document.getElementById('modal-candidate-violations').textContent = data.violationCount || 0;
+  document.getElementById('modal-candidate-progress').style.width = `${progressPercent}%`;
+
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+}
+
+const btnCloseModal = document.getElementById('btn-close-candidate-modal');
+if (btnCloseModal) {
+  btnCloseModal.onclick = () => {
+    const modal = document.getElementById('candidate-profile-modal');
+    modal.style.display = 'none';
+    modal.classList.add('hidden');
+    activeModalCandidateToken = null;
+  };
+}
+
+const btnModalKill = document.getElementById('btn-modal-kill');
+if (btnModalKill) {
+  btnModalKill.onclick = async () => {
+    if (!activeModalCandidateToken) return showToast('No token found for this candidate.');
+    if (await showCustomConfirm(`Terminate participant with ticket ${activeModalCandidateToken}?`)) {
+      try {
+        const { error } = await supabaseClient.from('session_tokens').update({ is_void: true }).eq('access_token', activeModalCandidateToken);
+        if (error) throw error;
+        showToast("Token Terminated Successfully.");
+        const modal = document.getElementById('candidate-profile-modal');
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+      } catch (err) {
+        showToast("Failed to terminate token: " + err.message);
+      }
+    }
+  };
+}
+
+window.openTelemetryModal = function (pin, title) {
   const modal = document.getElementById("telemetry-modal");
   const titleEl = document.getElementById("telemetry-modal-title");
-  
+
   if (titleEl) titleEl.textContent = "Monitoring: " + title + " (PIN: " + pin + ")";
   if (modal) modal.classList.add("active");
 
@@ -1238,6 +1429,31 @@ window.openTelemetryModal = function(pin, title) {
 // ----------------------------------------------------
 // Initialization
 // ----------------------------------------------------
+async function renderRecentPins() {
+  const container = document.getElementById('recent-pins-container');
+  if (!container || !supabaseClient) return;
+
+  try {
+    const { data: sessions, error } = await supabaseClient
+      .from('quiz_sessions')
+      .select('access_pin, status')
+      .neq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(8);
+
+    if (error || !sessions) return;
+
+    container.innerHTML = sessions.map(s => {
+      let statusColor = 'var(--color-gold)';
+      if (s.status === 'in_progress') statusColor = '#10b981';
+      if (s.status === 'evaluation') statusColor = '#f59e0b';
+      return `<button class="recent-pin-btn" style="border-color: ${statusColor}; color: ${statusColor};" onclick="document.getElementById('live-session-pin').value='${s.access_pin}'; document.getElementById('live-session-pin').dispatchEvent(new Event('change'));" title="Status: ${s.status}">📌 ${s.access_pin}</button>`;
+    }).join('');
+  } catch (e) {
+    console.warn("Failed to load active sessions for pins.", e);
+  }
+}
+
 function initializeAdminUI() {
   const loginForm = document.getElementById('form-admin-login');
   if (loginForm) {
@@ -1248,11 +1464,11 @@ function initializeAdminUI() {
       try {
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        
+
         showToast("Authentication successful.");
         document.getElementById('admin-login-container').style.display = 'none';
         document.getElementById('secure-dashboard-wrapper').style.display = 'block';
-        
+
         loadQuizzes();
         startLiveMonitor();
       } catch (err) {
@@ -1269,9 +1485,33 @@ function initializeAdminUI() {
       if (secureWrapper) secureWrapper.style.display = 'block';
       loadQuizzes();
       startLiveMonitor();
+
+      // Recover Host Codes
+      renderRecentPins();
+      const savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+      if (savedPins.length > 0 && el.liveSessionPin && !el.liveSessionPin.value) {
+        const mostRecentPin = savedPins[savedPins.length - 1];
+        el.liveSessionPin.value = mostRecentPin;
+        syncTelemetrySubscription(mostRecentPin, "live-telemetry-grid");
+      }
     }
   });
 
+  if (el.liveSessionPin) {
+    el.liveSessionPin.addEventListener('change', (e) => {
+      const pin = e.target.value.trim();
+      if (pin.length === 6) {
+        let savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+        if (!savedPins.includes(pin)) {
+          savedPins.push(pin);
+          if (savedPins.length > 5) savedPins.shift();
+          localStorage.setItem('chronos_host_pins', JSON.stringify(savedPins));
+          renderRecentPins();
+        }
+        syncTelemetrySubscription(pin, "live-telemetry-grid");
+      }
+    });
+  }
 
   // Initialize Tab Navigation
   const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1281,13 +1521,16 @@ function initializeAdminUI() {
     btn.addEventListener('click', () => {
       tabBtns.forEach(b => b.classList.remove('active'));
       tabContents.forEach(c => c.classList.remove('active'));
-      
+
       btn.classList.add('active');
-      
+
       const targetId = btn.getAttribute('data-target');
       const targetContent = document.getElementById(targetId);
       if (targetContent) {
         targetContent.classList.add('active');
+        if (targetId === 'tab-history') {
+          loadHistorySessions();
+        }
       }
     });
   });
@@ -1315,12 +1558,12 @@ function initializeAdminUI() {
     btnCloseModal.addEventListener("click", async () => {
       const modal = document.getElementById("telemetry-modal");
       if (modal) modal.classList.remove("active");
-      
+
       if (currentTelemetryChannel) {
         await currentTelemetryChannel.unsubscribe();
         currentTelemetryChannel = null;
       }
-      
+
       // Resubscribe to the main grid if a PIN is entered there
       if (el.liveSessionPin && el.liveSessionPin.value.trim()) {
         syncTelemetrySubscription(el.liveSessionPin.value.trim());
@@ -1334,21 +1577,21 @@ function initializeAdminUI() {
     btnLogout.addEventListener("click", async () => {
       try {
         await supabaseClient.auth.signOut();
-        
+
         // Hide secure dashboard wrapper
         const secureWrapper = document.getElementById('secure-dashboard-wrapper');
         if (secureWrapper) secureWrapper.style.display = 'none';
-        
+
         // Show login container
         const loginContainer = document.getElementById('admin-login-container');
         if (loginContainer) loginContainer.style.display = 'block';
-        
+
         // Clear login form inputs
         const emailInput = document.getElementById('admin-email');
         const passwordInput = document.getElementById('admin-password');
         if (emailInput) emailInput.value = '';
         if (passwordInput) passwordInput.value = '';
-        
+
         showToast("Logged out successfully.");
       } catch (err) {
         showToast("Logout failed: " + err.message);
@@ -1364,31 +1607,218 @@ if (document.readyState === "loading") {
 }
 
 // ----------------------------------------------------
+// History / Leaderboard Review
+// ----------------------------------------------------
+async function loadHistorySessions() {
+  const listEl = document.getElementById('history-sessions-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<p style="color: var(--color-text-secondary); font-size: 0.9rem;">Fetching past deployed sessions...</p>';
+
+  try {
+    const { data: sessions, error } = await supabaseClient
+      .from('quiz_sessions')
+      .select('id, access_pin, created_at, status, is_jumbled, display_mode, quizzes (title)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!sessions || sessions.length === 0) {
+      listEl.innerHTML = '<p style="color: var(--color-text-secondary); font-size: 0.9rem;">No historical sessions found.</p>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    sessions.forEach(session => {
+      const quizTitle = session.quizzes ? session.quizzes.title : 'Unknown Quiz';
+      const date = new Date(session.created_at).toLocaleString();
+      const isCompleted = session.status === 'completed';
+      const statusBadge = isCompleted
+        ? '<span style="color: #10b981; font-size: 0.8rem; border: 1px solid #10b981; padding: 2px 6px; border-radius: 4px;">Completed</span>'
+        : `<span style="color: #fbbf24; font-size: 0.8rem; border: 1px solid #fbbf24; padding: 2px 6px; border-radius: 4px;">${session.status}</span>`;
+
+      const div = document.createElement('div');
+      div.className = 'history-session-item glassmorphism';
+      div.style.padding = '1rem';
+      div.style.cursor = 'pointer';
+      div.style.transition = 'var(--transition-smooth)';
+      div.style.display = 'flex';
+      div.style.flexDirection = 'column';
+      div.style.gap = '0.5rem';
+
+      div.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: var(--color-gold-bright); font-size: 1.1rem;">PIN: ${session.access_pin || session.id.substring(0, 8)}</strong>
+          ${statusBadge}
+        </div>
+        <div style="color: var(--color-text-primary); font-size: 0.95rem;">${quizTitle}</div>
+        <div style="color: var(--color-text-secondary); font-size: 0.85rem;">${date}</div>
+      `;
+
+      div.onmouseover = () => { div.style.background = 'rgba(255, 215, 0, 0.1)'; };
+      div.onmouseout = () => { div.style.background = ''; };
+      div.onclick = () => {
+        document.querySelectorAll('.history-session-item').forEach(el => el.style.border = '1px solid var(--border-gold)');
+        div.style.border = '1px solid var(--color-gold-bright)';
+        div.style.background = 'rgba(255, 215, 0, 0.15)';
+        viewHistorySession(session.id, session.access_pin || session.id.substring(0, 8), quizTitle, date, session.status);
+      };
+
+      listEl.appendChild(div);
+    });
+
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = `<p style="color: var(--color-error); font-size: 0.9rem;">Error loading history: ${err.message}</p>`;
+  }
+}
+
+async function fetchHistorySessionResponses(sessionId) {
+  let responses = [];
+  let from = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseClient
+      .from('user_responses')
+      .select('participant_name, participant_guest_id, participant_email, is_correct, time_taken_ms, created_at, question_id, selected_option')
+      .eq('session_id', sessionId)
+      .range(from, to);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      responses = responses.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return responses;
+}
+
+async function viewHistorySession(sessionId, accessPin, quizTitle, dateString, status) {
+  document.getElementById('history-detail-title').textContent = `Leaderboard for PIN: ${accessPin}`;
+  document.getElementById('history-detail-meta').textContent = `${quizTitle} | ${dateString} | Status: ${status}`;
+
+  const tbody = document.getElementById('history-leaderboard-body');
+  const table = document.getElementById('history-leaderboard-table');
+  const emptyState = document.getElementById('history-empty-state');
+
+  if (!tbody || !table || !emptyState) return;
+
+  tbody.innerHTML = '';
+  table.style.display = 'none';
+  emptyState.style.display = 'block';
+  emptyState.textContent = 'Loading participant data...';
+
+  try {
+    const responses = await fetchHistorySessionResponses(sessionId);
+
+    if (!responses || responses.length === 0) {
+      emptyState.textContent = 'No participants submitted data for this session yet.';
+      return;
+    }
+
+    const scoresMap = {};
+    responses.forEach(r => {
+      const key = r.participant_guest_id || (r.participant_name + "_" + (r.participant_email || "guest"));
+      if (!scoresMap[key]) {
+        scoresMap[key] = {
+          name: r.participant_name,
+          score: 0,
+          timeMs: r.time_taken_ms || 0,
+          answeredQuestions: new Set()
+        };
+      }
+
+      // Deduplicate question_ids to strictly enforce 1 mark per question
+      if (!scoresMap[key].answeredQuestions.has(r.question_id)) {
+        scoresMap[key].answeredQuestions.add(r.question_id);
+        if (r.is_correct) {
+          scoresMap[key].score += 1;
+        }
+      }
+
+      if (r.time_taken_ms > scoresMap[key].timeMs) {
+        scoresMap[key].timeMs = r.time_taken_ms;
+      }
+    });
+
+    const candidates = Object.values(scoresMap);
+    candidates.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return a.timeMs - b.timeMs;
+    });
+
+    emptyState.style.display = 'none';
+    table.style.display = 'table';
+
+    candidates.forEach((c, idx) => {
+      const tr = document.createElement('tr');
+
+      let rankClass = '';
+      if (idx === 0) rankClass = 'rank-1';
+      else if (idx === 1) rankClass = 'rank-2';
+      else if (idx === 2) rankClass = 'rank-3';
+
+      tr.className = rankClass;
+
+      const formatT = (ms) => {
+        if (!ms) return 'N/A';
+        const mins = Math.floor(ms / 60000);
+        const secs = Math.floor((ms % 60000) / 1000);
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      };
+
+      tr.innerHTML = `
+        <td>#${idx + 1}</td>
+        <td style="font-weight: 500;">${escapeHTML(c.name)}</td>
+        <td style="color: var(--color-gold-bright); font-weight: 700;">${c.score}</td>
+        <td>${formatT(c.timeMs)}</td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    console.error(err);
+    emptyState.textContent = 'Error loading session data: ' + err.message;
+  }
+}
+
+// ----------------------------------------------------
 // Custom Premium Dialogs
 // ----------------------------------------------------
 function showCustomConfirm(message) {
   return new Promise((resolve) => {
     const modal = document.getElementById('custom-confirm-modal');
     if (!modal) {
-        console.error("custom-confirm-modal element missing from DOM");
-        return resolve(false);
+      console.error("custom-confirm-modal element missing from DOM");
+      return resolve(false);
     }
     const msgEl = document.getElementById('custom-confirm-msg');
     const btnYes = document.getElementById('custom-confirm-yes');
     const btnNo = document.getElementById('custom-confirm-no');
-    
+
     msgEl.textContent = message;
     modal.classList.add('active');
-    
+
     const cleanup = () => {
       btnYes.removeEventListener('click', onYes);
       btnNo.removeEventListener('click', onNo);
       modal.classList.remove('active');
     };
-    
+
     const onYes = () => { cleanup(); resolve(true); };
     const onNo = () => { cleanup(); resolve(false); };
-    
+
     btnYes.addEventListener('click', onYes);
     btnNo.addEventListener('click', onNo);
   });

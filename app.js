@@ -19,6 +19,26 @@
 const SUPABASE_URL = "https://ktdvbbouymbphuijkopl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0ZHZiYm91eW1icGh1aWprb3BsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyMjA4MzUsImV4cCI6MjA5NTc5NjgzNX0.fFCvVMsonXmaRQOJ2_fwaV4lH-VCMfd9K8kXJ7toycQ";
 
+const customStorageAdapter = {
+  getItem: (key) => {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) {}
+  },
+  removeItem: (key) => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) {}
+  }
+};
+
 let supabaseClient = null;
 
 // Initialize Supabase Client if credentials are provided
@@ -27,7 +47,8 @@ if (SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE
     try {
       supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
-          persistSession: false
+          storage: customStorageAdapter,
+          persistSession: true
         }
       });
     } catch (e) {
@@ -308,57 +329,69 @@ el.btnBackLeaderboard.addEventListener('click', () => {
   showView("view-results");
 });
 
-function renderBooklet() {
-  el.bookletContent.innerHTML = '';
+// Hardened Certified Booklet Hydration Pipeline
+async function renderBooklet() {
+  const container = document.getElementById('booklet-content');
+  if (!container) return;
+  container.innerHTML = '';
+
+  await loadQuestionsIfNeeded();
   
-  if (!state.questions || state.questions.length === 0) return;
-  
+  // Forcibly hydrate states straight from the certified database ledger 
+  // This shields the UI against browser refreshes or local state purges
+  const { data: serverRecords, error } = await supabaseClient
+    .from("user_responses")
+    .select("question_id, selected_option, is_correct")
+    .eq("access_token", state.accessToken); // Querying by specific token row
+
+  if (error || !serverRecords) {
+    container.textContent = "Error synchronizing historic records.";
+    return;
+  }
+
   state.questions.forEach((q, idx) => {
-    const userChoiceIndex = getSelectedOptionIndex(q, state.userAnswers[q.id]);
-    const userChoice = userChoiceIndex !== -1 ? getSelectedOptionText(q, state.userAnswers[q.id]) : "No Answer Selected";
-    const correctChoice = getCorrectOptionText(q) || "N/A";
-    const correctChoiceIndex = getCorrectOptionIndex(q);
-    const isCorrect = userChoiceIndex !== -1 && userChoiceIndex === correctChoiceIndex;
+    const historicalRow = serverRecords.find(r => r.question_id === q.id);
+    const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
     
+    let userText = "No Response Provided";
+    if (historicalRow && historicalRow.selected_option !== "NO_RESPONSE" && historicalRow.selected_option !== "AUTO_SUBMIT_DQ") {
+      const parsedVal = parseInt(historicalRow.selected_option, 10);
+      if (!isNaN(parsedVal) && parsedVal >= 0 && parsedVal < originalOptions.length) {
+        userText = originalOptions[parsedVal];
+      } else {
+        // Fallback for legacy records stored as direct text
+        userText = historicalRow.selected_option;
+      }
+    }
+    
+    const correctText = originalOptions[q.correct_index] || "Unspecified Correct Answer";
+    const isMarkedCorrect = historicalRow ? historicalRow.is_correct : false;
+
     const block = document.createElement('div');
     block.className = 'booklet-card card glassmorphism';
     
-    const headerHtml = `
-      <h4 class="booklet-question-text"></h4>
-      ${q.image_url ? `<img src="${q.image_url}" class="question-media" style="display:block; max-width:100%; margin-bottom:1rem; border-radius:8px;" />` : ''}
-    `;
+    // Hardened XSS Protection Layer via native element construction
+    const title = document.createElement('h4');
+    title.className = 'booklet-question-text scale-text';
+    title.textContent = `Q${idx + 1}. ${q.question_text}`;
+    block.appendChild(title);
 
-    const answersContainer = document.createElement('div');
-    answersContainer.className = 'booklet-answers';
+    const box = document.createElement('div');
+    box.className = 'booklet-answers scale-text';
+    box.innerHTML = isMarkedCorrect ? 
+      `<div class="booklet-answer-box booklet-correct"><span class="booklet-label">Your Answer:</span> <span class="answer-val"></span></div>` :
+      `<div class="booklet-answer-box booklet-incorrect"><span class="booklet-label">Your Answer:</span> <span class="answer-val error-text"></span></div>
+       <div class="booklet-answer-box booklet-actual-correct" style="margin-top:0.5rem;"><span class="booklet-label">Correct Target:</span> <span class="answer-target"></span></div>`;
     
-    if (isCorrect) {
-      answersContainer.innerHTML = `
-        <div class="booklet-answer-box">
-          <span class="booklet-label">Your Answer:</span>
-          <span class="answer-correct"></span>
-        </div>
-      `;
-      answersContainer.querySelector('.answer-correct').textContent = userChoice;
+    if (isMarkedCorrect) {
+      box.querySelector('.answer-val').textContent = userText;
     } else {
-      answersContainer.innerHTML = `
-        <div class="booklet-answer-box">
-          <span class="booklet-label">Your Answer:</span>
-          <span class="answer-wrong"></span>
-        </div>
-        <div class="booklet-answer-box" style="margin-top: 0.5rem;">
-          <span class="booklet-label">Correct Answer:</span>
-          <span class="answer-correct"></span>
-        </div>
-      `;
-      answersContainer.querySelector('.answer-wrong').textContent = userChoice;
-      answersContainer.querySelector('.answer-correct').textContent = correctChoice;
+      box.querySelector('.answer-val').textContent = userText;
+      box.querySelector('.answer-target').textContent = correctText;
     }
     
-    block.innerHTML = headerHtml;
-    block.querySelector('.booklet-question-text').textContent = `Q${idx + 1}. ${q.question_text}`;
-    block.appendChild(answersContainer);
-    
-    el.bookletContent.appendChild(block);
+    block.appendChild(box);
+    container.appendChild(block);
   });
 }
 
@@ -418,150 +451,110 @@ el.authForm.addEventListener("submit", async (e) => {
   }
 
   const name = el.inputName.value.trim();
-  const email = el.inputEmail.value.trim();
-  const rawSessionPin = el.inputSessionPin.value.trim();
+  const token = el.inputSessionPin.value.trim();
 
-  if (!isValidPIN(rawSessionPin)) {
-    showToast("Please enter a valid 6-Digit Access PIN.");
+  if (!name || token.length !== 6) {
+    showToast("Please provide your name and a valid 6-digit token.");
     return;
   }
 
-  // Disable join button while connecting
   const submitBtn = document.getElementById("btn-join-session");
   submitBtn.disabled = true;
   submitBtn.textContent = "Connecting...";
 
   try {
-    // 1. Fetch the Session details from database using the access PIN
-    const { data: session, error: sessionError } = await supabaseClient
-      .from("quiz_sessions")
-      .select("*")
-      .eq("access_pin", rawSessionPin)
+    // 1. Verify token against the ledger
+    const { data: tokenRecord, error: tokenError } = await supabaseClient
+      .from('session_tokens')
+      .select('*, quiz_sessions(status, is_jumbled, display_mode, quiz_id, completed_at)')
+      .eq('access_token', token)
       .single();
 
-    if (sessionError || !session) {
-      showToast("Access ID not found. Verify with your session host.");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Join Session";
-      return;
+    if (tokenError || !tokenRecord) {
+      throw new Error("Invalid or unrecognized token.");
+    }
+    
+    const sessionRecord = tokenRecord.quiz_sessions;
+    if (!sessionRecord) throw new Error("Linked session not found.");
+
+    // 2. Collision / Crash-Recovery Protocol
+    if (tokenRecord.is_claimed) {
+      // Allow re-entry if local memory signature matches, indicating a browser crash or refresh
+      const localGuestId = sessionStorage.getItem("guest_id");
+      if (tokenRecord.assigned_name !== name && tokenRecord.id !== localGuestId) {
+         throw new Error("This token has already been claimed by another participant.");
+      }
+      console.warn("Recovering previous state from token...");
+    } else {
+      // 3. Claim the token for this specific participant
+      const { error: claimError } = await supabaseClient
+        .from('session_tokens')
+        .update({ is_claimed: true, assigned_name: name })
+        .eq('access_token', token);
+        
+      if (claimError) throw claimError;
     }
 
-    // 2. Fetch Quiz Title details
+    // Assign operational variables
+    state.sessionId = tokenRecord.session_id;
+    state.guestId = tokenRecord.id; // Using the token UUID as the guest identity
+    state.participantName = name;
+    state.name = name;
+    state.accessToken = token;
+    state.quizId = sessionRecord.quiz_id;
+    state.isJumbled = sessionRecord.is_jumbled === false ? false : true;
+    state.displayMode = sessionRecord.display_mode || 'paged';
+    state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
+    
+    sessionStorage.setItem("guest_id", state.guestId);
+    sessionStorage.setItem("participantName", name);
+    sessionStorage.setItem("accessToken", token);
+    
+    // Fetch Quiz Title details
     const { data: quiz, error: quizError } = await supabaseClient
       .from("quizzes")
       .select("title")
-      .eq("id", session.quiz_id)
+      .eq("id", state.quizId)
       .single();
 
-    // Ensure Guest ID exists
-    let guestId = sessionStorage.getItem("guest_id");
-    if (!guestId) {
-      guestId = window.crypto && window.crypto.randomUUID 
-        ? window.crypto.randomUUID() 
-        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-      sessionStorage.setItem("guest_id", guestId);
-    }
-
-    // Store details in state
-    state.name = name;
-    state.email = email;
-    state.guestId = guestId;
-    state.sessionId = session.id; // Store the actual UUID for backend operations
-    state.quizId = session.quiz_id;
     state.quizTitle = quiz ? quiz.title : "Sacred Scroll Exam";
-    state.isJumbled = session.is_jumbled === false ? false : true;
-    state.displayMode = session.display_mode || 'paged';
-    state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
 
     // Setup UI summary
     el.summaryName.textContent = name;
-    el.summarySessionId.textContent = rawSessionPin;
+    el.summarySessionId.textContent = token;
     el.quizTitleText.textContent = state.quizTitle;
 
-    // Connect to real-time subscription for host state
-    subscribeToSession();
-
-    // Guard: block joining a session that is already ended
-    let initialStatus = session.status;
-    if (initialStatus === 'in_progress' && session.completed_at) {
+    // Determine Status
+    let initialStatus = sessionRecord.status;
+    if (initialStatus === 'in_progress' && sessionRecord.completed_at) {
       initialStatus = 'evaluation';
     }
 
     if (initialStatus === 'completed' || initialStatus === 'evaluation') {
-      // 1. Check if user exists using their current guestId
-      let { data: existingResponse } = await supabaseClient
-        .from('user_responses')
-        .select('participant_guest_id, participant_name, participant_email')
-        .eq('session_id', session.id)
-        .eq('participant_guest_id', guestId)
-        .limit(1);
-
-      // 2. Fallback: match by name case-insensitively if guestId search was empty
-      if (!existingResponse || existingResponse.length === 0) {
-        const { data: nameMatches } = await supabaseClient
-          .from('user_responses')
-          .select('participant_guest_id, participant_name, participant_email')
-          .eq('session_id', session.id)
-          .ilike('participant_name', name);
-
-        if (nameMatches && nameMatches.length > 0) {
-          // If the user typed an email, try to find an exact email match first
-          let matchedRecord = null;
-          if (email) {
-            matchedRecord = nameMatches.find(r => r.participant_email && r.participant_email.trim().toLowerCase() === email.toLowerCase());
-          }
-          // If no specific email match was found or user didn't enter an email, fallback to the first name match
-          if (!matchedRecord) {
-            matchedRecord = nameMatches[0];
-          }
-
-          existingResponse = [matchedRecord];
-          // Restore/Sync the guestId!
-          guestId = matchedRecord.participant_guest_id;
-          sessionStorage.setItem("guest_id", guestId);
-          state.guestId = guestId;
-          
-          state.name = matchedRecord.participant_name;
-          state.email = matchedRecord.participant_email || "";
-          el.summaryName.textContent = state.name;
-        }
-      }
-
-      if (existingResponse && existingResponse.length > 0) {
-        subscribeToSession();
-        if (initialStatus === 'completed') {
-          await loadLeaderboardData();
-          showView("view-results");
-        } else {
-          // evaluation status
-          showView("view-lock");
-          const lockTitle = el.viewLock.querySelector('.card-title');
-          const lockDesc = el.viewLock.querySelector('.card-description');
-          if (lockTitle) lockTitle.textContent = "Exam Halted for Evaluation";
-          if (lockDesc) lockDesc.textContent = "Exam Halted. Proctors are currently evaluating the results. Please wait.";
-        }
-        return;
+      // Since they have the token, they must be the original owner if we got past the claim check
+      subscribeToSession();
+      if (initialStatus === 'completed') {
+        await loadLeaderboardData();
+        showView("view-results");
       } else {
-        // Block new user joining finished / halted sessions
-        if (initialStatus === 'completed') {
-          showToast("⚠️ This session has already ended. Ask your host to open a new session.");
-        } else {
-          showToast("⚠️ This session is currently under evaluation. Please wait for the host.");
-        }
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Join Session";
-        return;
+        // evaluation status
+        showView("view-lock");
+        const lockTitle = el.viewLock.querySelector('.card-title');
+        const lockDesc = el.viewLock.querySelector('.card-description');
+        if (lockTitle) lockTitle.textContent = "Exam Halted for Evaluation";
+        if (lockDesc) lockDesc.textContent = "Exam Halted. Proctors are currently evaluating the results. Please wait.";
       }
+      return;
     }
 
+    // Invoke gateway transition
+    subscribeToSession();
     evaluateSessionStatus(initialStatus);
-
+    
   } catch (err) {
-    console.error("Connection error:", err);
-    showToast("Error connecting to Supabase: " + err.message);
+    console.error("Gateway Authorization Failed:", err);
+    showToast(err.message);
+  } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Join Session";
   }
@@ -573,6 +566,9 @@ el.authForm.addEventListener("submit", async (e) => {
 function subscribeToSession() {
   if (state.realtimeChannel) {
     state.realtimeChannel.unsubscribe();
+  }
+  if (state.tokenRealtimeChannel) {
+    state.tokenRealtimeChannel.unsubscribe();
   }
 
   // Subscribe to changes in the current quiz session
@@ -601,6 +597,27 @@ function subscribeToSession() {
         sendTelemetry();
       }
     });
+
+  // Secondary channel: Targeted Token Guillotine (Kill-Switch)
+  state.tokenRealtimeChannel = supabaseClient
+    .channel(`token-monitor-${state.accessToken}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'session_tokens',
+        filter: `access_token=eq.${state.accessToken}`
+      },
+      (payload) => {
+        if (payload.new.is_void === true) {
+          sessionStorage.clear();
+          alert("Your session has been terminated by the administrator.");
+          window.location.reload();
+        }
+      }
+    )
+    .subscribe();
 }
 
 function evaluateSessionStatus(status) {
@@ -615,12 +632,8 @@ function evaluateSessionStatus(status) {
       el.waitingLoaderContainer.style.display = 'none';
       el.gateContainer.style.display = 'block';
       
-      // Play a gentle professional chime sound
-      const chimeUrl = "data:audio/wav;base64,UklGRmYBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUMBAACAgICAgICAf3p2cW1pZmJgXVtYV1RTUVBOTUxLSUhGRURCQUA/Pjw7OTg3NTQzMjEwLy4tLCsqKSgnJiUkIyIhIB8eHRwbGhkYFxYVFBMSERAPDgwLCgkIBwYFBQQDAgEAAICAgICAgIB/enZxbWlmYmBdW1hXVFNQUE5NTEtJSEZFREJBQD8+PDs5ODc1NDMyMTAvLi0sKyopKCcms";
-      try {
-        const audio = new Audio(chimeUrl);
-        audio.play().catch(e => console.warn("Audio playback prevented:", e));
-      } catch(e) {}
+      // Audio chime removed to prevent NotSupportedError from truncated base64 string
+      console.log("Gate is open!");
     }
   } else if (status === 'evaluation') {
     // Exam halted by admin
@@ -743,6 +756,7 @@ function saveDisasterRecovery() {
     quizId: state.quizId,
     name: state.name,
     email: state.email,
+    accessToken: state.accessToken,
     questions: state.questions,
     isJumbled: state.isJumbled,
     displayMode: state.displayMode,
@@ -757,19 +771,20 @@ function sendTelemetry() {
     Object.keys(state.userAnswers).forEach(qId => {
       const q = state.questions.find(x => x.id === qId);
       if (q) {
-        const userChoiceIndex = getSelectedOptionIndex(q, state.userAnswers[qId]);
-        const userChoiceText = getSelectedOptionText(q, state.userAnswers[qId]);
+        const selectedVal = state.userAnswers[qId];
+        const selectedIndex = getSelectedOptionIndex(q, selectedVal);
+        const selectedText = getSelectedOptionText(q, selectedVal);
         const correctChoiceIndex = getCorrectOptionIndex(q);
         const correctChoiceText = getCorrectOptionText(q);
-
-        let isCorrect = false;
+        
+        let isCorrectValue = false;
         if (correctChoiceIndex !== -1) {
-          isCorrect = (userChoiceIndex === correctChoiceIndex);
+          isCorrectValue = (selectedIndex === correctChoiceIndex);
         } else if (correctChoiceText) {
-          isCorrect = (userChoiceText && userChoiceText.trim().toLowerCase() === correctChoiceText.trim().toLowerCase());
+          isCorrectValue = (selectedText && selectedText.trim().toLowerCase() === correctChoiceText.trim().toLowerCase());
         }
 
-        if (isCorrect) {
+        if (isCorrectValue) {
           currentScore++;
         }
       }
@@ -781,6 +796,7 @@ function sendTelemetry() {
       payload: {
         guestId: state.guestId,
         name: state.name,
+        accessToken: state.accessToken,
         answered: Object.keys(state.userAnswers).length,
         total: state.questions.length,
         flagged: Object.keys(state.reviewFlags).length,
@@ -1250,7 +1266,7 @@ async function submitQuiz(isForcedCheater = false) {
       const correctChoiceText = getCorrectOptionText(q);
       
       // If cheater and did not answer this question yet, or if they tabbed out completely
-      let selectedOptionToSave = selectedText || "NO_RESPONSE";
+      let selectedOptionToSave = (selectedIndex !== -1) ? selectedIndex.toString() : (selectedText || "NO_RESPONSE");
       let isCorrectValue = false;
 
       if (isForcedCheater) {
@@ -1494,6 +1510,7 @@ function restoreSavedSession() {
       state.quizId = saved.quizId;
       state.name = saved.name;
       state.email = saved.email;
+      state.accessToken = saved.accessToken || sessionStorage.getItem("accessToken");
       state.questions = saved.questions;
       state.isJumbled = saved.isJumbled !== undefined ? saved.isJumbled : true;
       state.displayMode = saved.displayMode || 'paged';

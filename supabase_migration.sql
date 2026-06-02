@@ -19,3 +19,38 @@ FROM (
   FROM public.questions
 ) sub
 WHERE q.id = sub.id AND q.sort_order IS NULL;
+
+-- Migration: Managed Session Tokens Upgrades
+CREATE TABLE session_tokens (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    session_id UUID REFERENCES quiz_sessions(id) ON DELETE CASCADE,
+    access_token VARCHAR(6) UNIQUE NOT NULL,
+    assigned_name TEXT DEFAULT NULL,
+    is_claimed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE user_responses
+ADD COLUMN access_token VARCHAR(6) REFERENCES session_tokens(access_token);
+
+CREATE INDEX idx_session_tokens_access_token ON session_tokens(access_token);
+
+-- Fix for 403 Forbidden Error: Granting anon access and setting up RLS policies
+GRANT ALL ON TABLE public.session_tokens TO anon;
+GRANT ALL ON TABLE public.session_tokens TO authenticated;
+
+ALTER TABLE public.session_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on session_tokens" 
+ON public.session_tokens FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert on session_tokens" 
+ON public.session_tokens FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public update on session_tokens" 
+ON public.session_tokens FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public delete on session_tokens" 
+ON public.session_tokens FOR DELETE USING (true);
+
+ALTER TABLE public.session_tokens ADD COLUMN IF NOT EXISTS is_void BOOLEAN DEFAULT FALSE;

@@ -44,18 +44,14 @@
 
         <form id="auth-form" class="auth-form">
           <div class="form-group">
-            <label for="input-name">Full Name</label>
-            <input type="text" id="input-name" placeholder="E.g., John Doe" required autocomplete="name">
+            <label for="input-name" class="scale-text">Full Name</label>
+            <input type="text" id="input-name" class="input-field scale-text" placeholder="E.g., John Doe" required autocomplete="name">
           </div>
-
+          
           <div class="form-group">
-            <label for="input-email">Email Address (Optional)</label>
-            <input type="email" id="input-email" placeholder="E.g., john@example.com" autocomplete="email">
-          </div>
-
-          <div class="form-group">
-            <label for="input-session-pin">6-Digit Access PIN</label>
-            <input type="text" id="input-session-pin" placeholder="E.g., 123456" pattern="\d{6}" maxlength="6" required autocomplete="off" style="font-size: 1.5rem; letter-spacing: 0.5rem; text-align: center; font-family: monospace;">
+            <label for="input-session-pin" class="scale-text">6-Digit Passcode Ticket</label>
+            <input type="text" id="input-session-pin" class="input-field scale-text" pattern="\d{6}" maxlength="6" placeholder="000000" required autocomplete="off" style="font-size: 1.5rem; letter-spacing: 0.5rem; text-align: center; font-family: monospace;">
+            <small class="scale-text text-muted" style="display:block; margin-top:0.5rem; color:var(--color-text-secondary);">Enter the 6-digit code provided by your administrator.</small>
           </div>
 
           <button type="submit" id="btn-join-session" class="btn-primary">Join Session</button>
