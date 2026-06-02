@@ -898,18 +898,45 @@ function initializeQuizUI() {
       }
     });
     
+    // Remove previous if exists
+    const oldFab = document.getElementById('wayfinder-fab');
+    if (oldFab) oldFab.remove();
+    const oldModal = document.getElementById('wayfinder-modal');
+    if (oldModal) oldModal.remove();
+
+    // Create FAB
+    const fab = document.createElement('div');
+    fab.id = 'wayfinder-fab';
+    fab.innerHTML = '🧭';
+    fab.className = 'wayfinder-fab glassmorphism';
+    document.body.appendChild(fab);
+
+    // Create Modal
     const bottomMapContainer = document.createElement('div');
-    bottomMapContainer.className = 'scroll-bottom-map card glassmorphism';
-    bottomMapContainer.style.marginTop = '2rem';
+    bottomMapContainer.id = 'wayfinder-modal';
+    bottomMapContainer.className = 'scroll-bottom-map card glassmorphism wayfinder-modal hidden';
     bottomMapContainer.innerHTML = `
-      <h3 style="text-align:center; color:var(--color-gold); margin-bottom:1rem; font-family:var(--font-serif);">Scroll Wayfinder</h3>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="color:var(--color-gold); margin: 0; font-family:var(--font-serif);">Scroll Wayfinder</h3>
+        <button id="close-wayfinder" style="background: transparent; border: none; color: var(--color-text-secondary); font-size: 1.5rem; cursor: pointer;">✕</button>
+      </div>
       <div class="question-map-grid" id="scroll-bottom-map-grid"></div>
     `;
-    el.quizContentArea.appendChild(bottomMapContainer);
+    document.body.appendChild(bottomMapContainer);
+    
     updateQuestionMap();
     
-    // Toggle layout padding
-    document.getElementById('quiz-main-layout').classList.add('scroll-mode-padding');
+    // Toggle Modal
+    fab.addEventListener('click', () => {
+      bottomMapContainer.classList.toggle('hidden');
+    });
+    
+    document.getElementById('close-wayfinder').addEventListener('click', () => {
+      bottomMapContainer.classList.add('hidden');
+    });
+    
+    // Toggle layout padding (no longer need extra padding at bottom)
+    document.getElementById('quiz-main-layout').classList.remove('scroll-mode-padding');
     
     if (el.scrollStickyFooter) el.scrollStickyFooter.style.display = 'flex';
     
