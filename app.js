@@ -91,10 +91,15 @@ function escapeHTML(str) {
 function getSelectedOptionIndex(q, answer) {
   if (answer === undefined || answer === null || answer === '') return -1;
   const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
-  const index = parseInt(answer, 10);
-  if (!isNaN(index) && index >= 0 && index < originalOptions.length) {
-    return index;
+  
+  const isDigitsOnly = /^\d+$/.test(String(answer).trim());
+  if (isDigitsOnly || typeof answer === 'number') {
+    const index = parseInt(answer, 10);
+    if (index >= 0 && index < originalOptions.length) {
+      return index;
+    }
   }
+  
   const text = String(answer).trim().toLowerCase();
   return originalOptions.findIndex(opt => opt && opt.trim().toLowerCase() === text);
 }
@@ -102,9 +107,13 @@ function getSelectedOptionIndex(q, answer) {
 function getSelectedOptionText(q, answer) {
   if (answer === undefined || answer === null || answer === '') return null;
   const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
-  const index = parseInt(answer, 10);
-  if (!isNaN(index) && index >= 0 && index < originalOptions.length) {
-    return originalOptions[index];
+  
+  const isDigitsOnly = /^\d+$/.test(String(answer).trim());
+  if (isDigitsOnly || typeof answer === 'number') {
+    const index = parseInt(answer, 10);
+    if (index >= 0 && index < originalOptions.length) {
+      return originalOptions[index];
+    }
   }
   return String(answer);
 }
@@ -356,9 +365,14 @@ async function renderBooklet() {
     
     let userText = "No Response Provided";
     if (historicalRow && historicalRow.selected_option !== "NO_RESPONSE" && historicalRow.selected_option !== "AUTO_SUBMIT_DQ") {
-      const parsedVal = parseInt(historicalRow.selected_option, 10);
-      if (!isNaN(parsedVal) && parsedVal >= 0 && parsedVal < originalOptions.length) {
-        userText = originalOptions[parsedVal];
+      const isDigitsOnly = /^\d+$/.test(String(historicalRow.selected_option).trim());
+      if (isDigitsOnly) {
+        const parsedVal = parseInt(historicalRow.selected_option, 10);
+        if (parsedVal >= 0 && parsedVal < originalOptions.length) {
+          userText = originalOptions[parsedVal];
+        } else {
+          userText = historicalRow.selected_option;
+        }
       } else {
         // Fallback for legacy records stored as direct text
         userText = historicalRow.selected_option;
