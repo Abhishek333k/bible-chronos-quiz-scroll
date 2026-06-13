@@ -864,6 +864,7 @@ window.backupQuiz = async function (quizId, quizTitle) {
       .from('questions')
       .select('*')
       .eq('quiz_id', quizId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
 
     if (error) throw error;
@@ -906,6 +907,7 @@ el.ledgerSelectQuiz.addEventListener('change', async () => {
       .from('questions')
       .select('*')
       .eq('quiz_id', quizId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
 
     if (error) throw error;
