@@ -854,25 +854,35 @@ function initializeQuizUI() {
       q._shuffledIndices.forEach((origIdx, displayIdx) => {
         const optText = originalOptions[origIdx];
         const letter = String.fromCharCode(65 + displayIdx);
-        const btn = document.createElement('button');
-        btn.className = "option-btn";
-        btn.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
-        btn.querySelector(".option-text-content").textContent = optText;
+        
+        const optRow = document.createElement('div');
+        optRow.className = "option-row";
+        
+        const optIndicator = document.createElement('div');
+        optIndicator.className = "option-indicator";
+        optIndicator.textContent = letter + ".";
+        
+        const optTextEl = document.createElement('div');
+        optTextEl.className = "option-text";
+        optTextEl.textContent = optText;
         
         if (getSelectedOptionIndex(q, state.userAnswers[q.id]) === origIdx) {
-          btn.classList.add("selected");
+          optRow.classList.add("selected");
         }
         
-        btn.addEventListener('click', () => {
-          optContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
+        optIndicator.addEventListener('click', (e) => {
+          optContainer.querySelectorAll('.option-row').forEach(b => b.classList.remove('selected'));
+          optRow.classList.add('selected');
           state.userAnswers[q.id] = origIdx;
           saveDisasterRecovery();
           updateFooterCounter();
           updateQuestionMap();
           sendTelemetry();
         });
-        optContainer.appendChild(btn);
+        
+        optRow.appendChild(optIndicator);
+        optRow.appendChild(optTextEl);
+        optContainer.appendChild(optRow);
       });
 
       // Bind actions for this scroll question
@@ -881,7 +891,7 @@ function initializeQuizUI() {
       if (btnClear) {
         btnClear.addEventListener('click', () => {
           delete state.userAnswers[q.id];
-          optContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+          optContainer.querySelectorAll('.option-row').forEach(b => b.classList.remove('selected'));
           saveDisasterRecovery();
           updateFooterCounter();
           updateQuestionMap();
@@ -1212,25 +1222,34 @@ function renderQuestionPaged() {
   currentQuestion._shuffledIndices.forEach((origIdx, displayIdx) => {
     const optText = originalOptions[origIdx];
     const letter = String.fromCharCode(65 + displayIdx);
-    const button = document.createElement("button");
-    button.className = "option-btn";
-    button.innerHTML = `<span class="option-letter">${letter}.</span> <span class="option-text-content"></span>`;
-    button.querySelector(".option-text-content").textContent = optText;
+    
+    const optRow = document.createElement('div');
+    optRow.className = "option-row";
+    
+    const optIndicator = document.createElement('div');
+    optIndicator.className = "option-indicator";
+    optIndicator.textContent = letter + ".";
+    
+    const optTextEl = document.createElement('div');
+    optTextEl.className = "option-text";
+    optTextEl.textContent = optText;
     
     if (getSelectedOptionIndex(currentQuestion, state.userAnswers[currentQuestion.id]) === origIdx) {
-      button.classList.add("selected");
+      optRow.classList.add("selected");
     }
     
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".option-btn").forEach(btn => btn.classList.remove("selected"));
-      button.classList.add("selected");
+    optIndicator.addEventListener("click", () => {
+      document.querySelectorAll(".option-row").forEach(btn => btn.classList.remove("selected"));
+      optRow.classList.add("selected");
       state.userAnswers[currentQuestion.id] = origIdx;
       saveDisasterRecovery();
       updateQuestionMap(); // Update grid style
       sendTelemetry();
     });
     
-    el.optionsWrapper.appendChild(button);
+    optRow.appendChild(optIndicator);
+    optRow.appendChild(optTextEl);
+    el.optionsWrapper.appendChild(optRow);
   });
 
   // Bind actions for paged mode
@@ -1239,7 +1258,7 @@ function renderQuestionPaged() {
   if (btnClear) {
     btnClear.onclick = () => {
       delete state.userAnswers[currentQuestion.id];
-      el.optionsWrapper.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+      el.optionsWrapper.querySelectorAll('.option-row').forEach(b => b.classList.remove('selected'));
       saveDisasterRecovery();
       updateQuestionMap();
       sendTelemetry();
