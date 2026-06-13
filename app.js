@@ -178,7 +178,8 @@ let state = {
   
   // Settings
   isJumbled: true,
-  displayMode: 'paged'
+  displayMode: 'paged',
+  isSubmitting: false
 };
 
 // ----------------------------------------------------
@@ -764,23 +765,10 @@ function updateFooterCounter() {
 
 function saveDisasterRecovery() {
   try {
-    sessionStorage.setItem("inProgressQuiz", JSON.stringify({
-      userAnswers: state.userAnswers,
-      reviewFlags: state.reviewFlags,
-      currentQuestionIndex: state.currentQuestionIndex,
-      guestId: state.guestId,
-      sessionId: state.sessionId,
-      quizId: state.quizId,
-      quizTitle: state.quizTitle,
-      name: state.name,
-      email: state.email,
-      accessToken: state.accessToken,
-      questions: state.questions,
-      isJumbled: state.isJumbled,
-      displayMode: state.displayMode,
-      isAntiCheatEnabled: state.isAntiCheatEnabled,
-      savedTimeMs: state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs
-    }));
+    const safeState = { ...state };
+    delete safeState.questions; // Strip heavy payload before saving
+    safeState.savedTimeMs = state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs;
+    sessionStorage.setItem("inProgressQuiz", JSON.stringify(safeState));
   } catch (e) {
     console.warn("Storage restricted");
   }
@@ -1423,6 +1411,14 @@ window.addEventListener("blur", () => {
 // 12. View 5 & 6: Submission Ledger & Leaderboard
 // ----------------------------------------------------
 async function submitQuiz(isForcedCheater = false) {
+  if (state.isSubmitting) return;
+  state.isSubmitting = true;
+
+  if (document.getElementById('btn-submit-quiz')) {
+    document.getElementById('btn-submit-quiz').disabled = true;
+    document.getElementById('btn-submit-quiz').textContent = "Submitting...";
+  }
+
   stopTimer();
   
   // Exit Fullscreen mode cleanly
@@ -1491,6 +1487,8 @@ async function submitQuiz(isForcedCheater = false) {
   } catch (err) {
     console.error("Submission error:", err);
     showToast("Ledger insertion failed. Please contact your host. Details: " + err.message);
+  } finally {
+    state.isSubmitting = false;
   }
 }
 
@@ -1677,7 +1675,7 @@ el.btnExitToMenu.addEventListener("click", () => {
 // ----------------------------------------------------
 // 13. Disaster Recovery (Auto-Save Restore)
 // ----------------------------------------------------
-function restoreSavedSession() {
+async function restoreSavedSession() {
   let recoveryData = null;
   try {
     recoveryData = sessionStorage.getItem("inProgressQuiz");
@@ -1699,10 +1697,23 @@ function restoreSavedSession() {
       state.name = saved.name;
       state.email = saved.email;
       state.accessToken = saved.accessToken || sessionStorage.getItem("accessToken");
-      state.questions = saved.questions;
       state.isJumbled = saved.isJumbled !== undefined ? saved.isJumbled : true;
       state.displayMode = saved.displayMode || 'paged';
       state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
+
+      // Re-fetch questions since they were stripped from storage
+      const { data: questions, error } = await supabaseClient
+        .from("questions")
+        .select("*")
+        .eq("quiz_id", state.quizId)
+        .order("sort_order", { ascending: true });
+        
+      if (error) {
+        console.error("Failed to re-fetch questions for recovery:", error);
+        return;
+      }
+      
+      state.questions = questions || [];
       
       // Update UI summary
       el.summaryName.textContent = state.name;

@@ -41,16 +41,13 @@ GRANT ALL ON TABLE public.session_tokens TO authenticated;
 
 ALTER TABLE public.session_tokens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public select on session_tokens" 
-ON public.session_tokens FOR SELECT USING (true);
+-- Allow public to READ tokens (needed for join verification)
+CREATE POLICY "Allow public read of session_tokens" ON public.session_tokens FOR SELECT USING (true);
 
-CREATE POLICY "Allow public insert on session_tokens" 
-ON public.session_tokens FOR INSERT WITH CHECK (true);
+-- Allow public to UPDATE a token ONLY to claim it (cannot unclaim or change session_id)
+CREATE POLICY "Allow public to claim tokens" ON public.session_tokens FOR UPDATE USING (is_claimed = false) WITH CHECK (is_claimed = true);
 
-CREATE POLICY "Allow public update on session_tokens" 
-ON public.session_tokens FOR UPDATE USING (true);
-
-CREATE POLICY "Allow public delete on session_tokens" 
-ON public.session_tokens FOR DELETE USING (true);
+-- Allow authenticated Admins full access (Insert, Update, Delete)
+CREATE POLICY "Allow admin full access to session_tokens" ON public.session_tokens FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE public.session_tokens ADD COLUMN IF NOT EXISTS is_void BOOLEAN DEFAULT FALSE;

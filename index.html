@@ -1,18 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Bible Chronos Quiz Scroll - The Ultimate Speedrun</title>
   <!-- Google Fonts for cinematic historical look -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- CSS Stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <!-- Background cinematic parchment overlay -->
@@ -25,7 +30,7 @@
     <header id="main-header">
       <div class="header-logo">📜</div>
       <h1 class="title-primary">Bible Chronos</h1>
-      <p class="title-subtitle">The Sacred Speedrun Scroll</p>
+      <p class="title-subtitle">The Sacred Quiz Scroll</p>
     </header>
 
     <!-- State Machine Views -->
@@ -33,25 +38,32 @@
     <!-- View 1: Welcome/Auth -->
     <section id="view-auth" class="view active">
       <div class="card glassmorphism">
-        <h2 class="card-title">Enter the Gates</h2>
+        <h2 class="card-title">Enter the Quiz</h2>
         <p class="card-description">Provide your credentials and the Session Access ID to unlock the chronos scroll.</p>
 
-        <div class="timer-disclaimer" style="margin-bottom: 1.5rem; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-warning); background: rgba(245, 158, 11, 0.1);">
+        <div class="timer-disclaimer"
+          style="margin-bottom: 1.5rem; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-warning); background: rgba(245, 158, 11, 0.1);">
           <p style="color: var(--color-warning); font-size: 0.9rem; margin: 0; font-weight: bold;">
-            ⏱️ Speedrun timer is synchronized globally. Your clock begins the exact moment the Proctor authorizes the session.
+            ⏱️ Speedrun timer is synchronized globally. Your clock begins the exact moment the Proctor authorizes the
+            session.
           </p>
         </div>
 
         <form id="auth-form" class="auth-form">
           <div class="form-group">
             <label for="input-name" class="scale-text">Full Name</label>
-            <input type="text" id="input-name" class="input-field scale-text" placeholder="E.g., John Doe" required autocomplete="name">
+            <input type="text" id="input-name" class="input-field scale-text" placeholder="E.g., John Doe" required
+              autocomplete="name">
           </div>
-          
+
           <div class="form-group">
             <label for="input-session-pin" class="scale-text">6-Digit Passcode Ticket</label>
-            <input type="text" id="input-session-pin" class="input-field scale-text" pattern="\d{6}" maxlength="6" placeholder="000000" required autocomplete="off" style="font-size: 1.5rem; letter-spacing: 0.5rem; text-align: center; font-family: monospace;">
-            <small class="scale-text text-muted" style="display:block; margin-top:0.5rem; color:var(--color-text-secondary);">Enter the 6-digit code provided by your administrator.</small>
+            <input type="text" id="input-session-pin" class="input-field scale-text" pattern="\d{6}" maxlength="6"
+              placeholder="000000" required autocomplete="off"
+              style="font-size: 1.5rem; letter-spacing: 0.5rem; text-align: center; font-family: monospace;">
+            <small class="scale-text text-muted"
+              style="display:block; margin-top:0.5rem; color:var(--color-text-secondary);">Enter the 6-digit code
+              provided by your administrator.</small>
           </div>
 
           <button type="submit" id="btn-join-session" class="btn-primary">Join Session</button>
@@ -59,7 +71,9 @@
 
         <!-- Privacy & Terms Banner -->
         <footer class="privacy-banner">
-          <p>🛡️ <strong>Scoring Integrity Notice:</strong> By entering, you agree that your name, email, speedrun time, and question response metrics are recorded live. Fullscreen mode and active window focus are strictly monitored to ensure exam fairness.</p>
+          <p>🛡️ <strong>Scoring Integrity Notice:</strong> By entering, you agree that your name, email, speedrun time,
+            and question response metrics are recorded live. Fullscreen mode and active window focus are strictly
+            monitored to ensure exam fairness.</p>
         </footer>
       </div>
     </section>
@@ -71,18 +85,21 @@
           <div class="ticking-clock">
             <div class="clock-hand"></div>
           </div>
-          <h2 class="card-title" id="waiting-title">Sanctuary of Wait</h2>
-          <p class="status-badge waiting" id="waiting-status">Status: Waiting for Host</p>
-          <p class="card-description text-highlight" id="waiting-desc">The scribe has not yet opened the gates. Please remain here. You will be automatically ushered forward when the quiz begins.</p>
-          
+          <h2 class="card-title" id="waiting-title">Waiting Room</h2>
+          <p class="status-badge waiting" id="waiting-status">Status: Waiting for Proctor</p>
+          <p class="card-description text-highlight" id="waiting-desc">The scribe has not yet started the quiz. Please
+            remain here. You will be automatically ushered forward when the quiz begins.</p>
+
           <div class="participant-info-summary">
             <p>Logged in as: <span id="summary-participant-name" class="gold-text"></span></p>
             <p>Session ID: <span id="summary-session-id" class="dim-text"></span></p>
           </div>
-          
-          <div class="timer-disclaimer" style="margin-top: 1.5rem; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-warning); background: rgba(245, 158, 11, 0.1);">
+
+          <div class="timer-disclaimer"
+            style="margin-top: 1.5rem; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-warning); background: rgba(245, 158, 11, 0.1);">
             <p style="color: var(--color-warning); font-size: 0.9rem; margin: 0; font-weight: bold;">
-              ⏱️ Speedrun timer is synchronized globally. Your clock begins the exact moment the Proctor authorizes the session.
+              ⏱️ Speedrun timer is synchronized globally. Your clock begins the exact moment the Proctor authorizes the
+              session.
             </p>
           </div>
 
@@ -95,14 +112,19 @@
 
         <div id="gate-container" style="display: none; margin-top: 2rem;">
           <h2 class="card-title gold-text">The Gates Are Open!</h2>
-          <div class="gate-icon" style="font-size: 3rem; margin: 1rem 0; filter: drop-shadow(0 0 15px var(--color-gold-glow));">🔑</div>
-          <p class="card-description warning-text" style="color: var(--color-text-primary); background: rgba(239, 68, 68, 0.08); border-left: 3px solid var(--color-danger); padding: 1rem; border-radius: 0 6px 6px 0; text-align: left;">
-            <strong>WARNING:</strong> Entering the exam triggers strict anti-cheat tracking. Tabbing out, changing windows, or exiting fullscreen will count as security violations. Two violations will cause immediate automatic submission.
+          <div class="gate-icon"
+            style="font-size: 3rem; margin: 1rem 0; filter: drop-shadow(0 0 15px var(--color-gold-glow));">🔑</div>
+          <p class="card-description warning-text"
+            style="color: var(--color-text-primary); background: rgba(239, 68, 68, 0.08); border-left: 3px solid var(--color-danger); padding: 1rem; border-radius: 0 6px 6px 0; text-align: left;">
+            <strong>WARNING:</strong> Entering the exam triggers strict anti-cheat tracking. Tabbing out, changing
+            windows, or exiting fullscreen will count as security violations. Two violations will cause immediate
+            automatic submission.
           </p>
           <p class="card-description">
             Make sure all distractions are disabled and click below to enter fullscreen and start your speedrun.
           </p>
-          <button id="btn-enter-fullscreen" class="btn-primary btn-gate" style="width: 100%; font-size: 1.1rem;">Enter Fullscreen & Start Exam</button>
+          <button id="btn-enter-fullscreen" class="btn-primary btn-gate" style="width: 100%; font-size: 1.1rem;">Enter
+            Fullscreen & Start Exam</button>
         </div>
       </div>
     </section>
@@ -114,7 +136,7 @@
         <div class="quiz-title-bar">
           <span class="quiz-title-display" id="quiz-title-text">Loading Quiz...</span>
         </div>
-        
+
         <div class="quiz-top-bar">
           <!-- Left Section: Candidate Profile -->
           <div class="quiz-info-left">
@@ -123,7 +145,7 @@
               <span id="top-candidate-id" class="candidate-id-top">#000000</span>
             </div>
           </div>
-          
+
           <!-- Center Section: Timer -->
           <div class="timer-container">
             <span class="timer-label">TIME</span>
@@ -147,7 +169,7 @@
 
       <!-- Main Quiz Container -->
       <div id="quiz-main-layout" class="quiz-main-layout">
-        
+
         <!-- Left: Question Area -->
         <div class="quiz-left-column">
           <div class="progress-bar-wrapper" id="progress-bar-wrapper">
@@ -161,9 +183,10 @@
                 <span class="question-number-badge" id="question-index-badge">Q1</span>
                 <h3 class="question-text" id="question-content-text">Loading question text...</h3>
               </div>
-              
-              <img id="question-image" class="question-media" src="" alt="Question Image" style="display: none;" loading="lazy">
-              
+
+              <img id="question-image" class="question-media" src="" alt="Question Image" style="display: none;"
+                loading="lazy">
+
               <div class="options-container" id="quiz-options-wrapper">
                 <!-- Shuffled options dynamically generated -->
               </div>
@@ -173,7 +196,7 @@
               </div>
             </div>
           </div>
-          
+
           <div class="quiz-footer-actions" id="quiz-footer-actions">
             <button id="btn-prev-question" class="btn-secondary" style="display: none;">Previous</button>
             <button id="btn-next-question" class="btn-primary" disabled>Next Question</button>
@@ -187,7 +210,7 @@
             <div id="question-map-grid" class="question-map-grid">
               <!-- Dynamically populated buttons -->
             </div>
-            
+
             <div style="margin-top: 2rem;">
               <button id="btn-submit-map" class="btn-primary btn-block">Submit Exam</button>
             </div>
@@ -207,11 +230,11 @@
       <div class="card glassmorphism text-center">
         <div class="lock-icon">🔒</div>
         <h2 class="card-title">Exam Locked & Submitted</h2>
-        <p class="card-description">Your answers have been securely recorded in the Supabase Ledger.</p>
-        
+        <p class="card-description">Your answers have been securely recorded in the Scribe's Ledger.</p>
+
         <div class="spinner-container">
           <div class="loading-spinner"></div>
-          <p class="spinner-text">Awaiting host to release results...</p>
+          <p class="spinner-text">Awaiting proctor to release results...</p>
         </div>
 
         <div class="session-results-placeholder">
@@ -244,8 +267,9 @@
             <span class="stat-value" id="user-final-violations" style="color: var(--color-danger);">0</span>
           </div>
         </div>
-        
-        <button id="btn-review-answers" class="btn-secondary" style="margin-bottom: 2rem;">🔍 Review Your Answers</button>
+
+        <button id="btn-review-answers" class="btn-secondary" style="margin-bottom: 2rem;">🔍 Review Your
+          Answers</button>
 
         <!-- Leaderboard Table -->
         <div class="leaderboard-container">
@@ -279,9 +303,10 @@
 
     <!-- View 7: The Evaluated Booklet -->
     <section id="view-booklet" class="view">
-      <div class="card glassmorphism results-card text-center" style="max-width: 900px; margin: 0 auto; text-align: left;">
+      <div class="card glassmorphism results-card text-center"
+        style="max-width: 900px; margin: 0 auto; text-align: left;">
         <h2 class="card-title gold-text text-center" style="margin-bottom: 2rem;">Your Evaluated Scroll</h2>
-        
+
         <div id="booklet-content" style="display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2.5rem;">
           <!-- Dynamically populated by app.js -->
         </div>
@@ -303,7 +328,8 @@
         Violation <span id="modal-violation-count">1</span> of 2
       </div>
       <p class="modal-warning">
-        Tabbing out to check external Bible references or exiting fullscreen is prohibited. On the second violation, your exam will be automatically submitted immediately.
+        Tabbing out to check external Bible references or exiting fullscreen is prohibited. On the second violation,
+        your exam will be automatically submitted immediately.
       </p>
       <button id="btn-resume-quiz" class="btn-primary">Return to Exam & Re-Enter Fullscreen</button>
     </div>
@@ -320,14 +346,18 @@
   <!-- Premium Custom Confirm Modal -->
   <div id="custom-confirm-modal" class="modal-overlay">
     <div class="card glassmorphism text-center" style="max-width: 400px; margin: auto;">
-      <h2 class="title-primary" style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--color-gold-bright);">Confirmation Required</h2>
+      <h2 class="title-primary" style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--color-gold-bright);">
+        Confirmation Required</h2>
       <p id="custom-confirm-msg" class="card-description text-highlight" style="margin-bottom: 2rem;"></p>
       <div style="display: flex; gap: 1rem; justify-content: center;">
-        <button id="custom-confirm-yes" class="btn-primary" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Yes, Proceed</button>
-        <button id="custom-confirm-no" class="btn-secondary" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Cancel</button>
+        <button id="custom-confirm-yes" class="btn-primary" style="flex: 1; padding: 0.8rem; font-size: 1rem;">Yes,
+          Proceed</button>
+        <button id="custom-confirm-no" class="btn-secondary"
+          style="flex: 1; padding: 0.8rem; font-size: 1rem;">Cancel</button>
       </div>
     </div>
   </div>
 
 </body>
+
 </html>
