@@ -767,6 +767,18 @@ function saveDisasterRecovery() {
   try {
     const safeState = { ...state };
     delete safeState.questions; // Strip heavy payload before saving
+    
+    // Save order of questions and dynamic option shuffle maps to persist state exactly
+    if (state.questions && state.questions.length > 0) {
+      safeState.questionIdsOrder = state.questions.map(q => q.id);
+      safeState.shuffledIndicesMap = {};
+      state.questions.forEach(q => {
+        if (q._shuffledIndices) {
+          safeState.shuffledIndicesMap[q.id] = q._shuffledIndices;
+        }
+      });
+    }
+    
     safeState.savedTimeMs = state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs;
     sessionStorage.setItem("inProgressQuiz", JSON.stringify(safeState));
   } catch (e) {
@@ -827,7 +839,12 @@ function initializeQuizUI() {
       const qBlock = document.createElement('div');
       qBlock.id = 'scroll-q-' + index;
       qBlock.className = 'scroll-question-block card glassmorphism paged-card';
-      const imageHtml = q.image_url ? `<img class="question-media" src="${q.image_url}" alt="Question Image" style="display: block;">` : `<img class="question-media" src="" alt="Question Image" style="display: none;">`;
+      const imageHtml = q.image_url ? `
+        <div class="question-image-container loading">
+          <img class="question-media" src="${q.image_url}" alt="Question Image" onload="this.parentNode.classList.remove('loading')" onerror="this.parentNode.classList.remove('loading'); this.parentNode.style.display='none';">
+          <div class="image-loader-spinner"><div class="loading-spinner"></div></div>
+        </div>
+      ` : '';
       qBlock.innerHTML = `
         <div class="question-header">
           <span class="question-number-badge">Q${index + 1}</span>
@@ -860,7 +877,7 @@ function initializeQuizUI() {
         
         const optIndicator = document.createElement('div');
         optIndicator.className = "option-indicator";
-        optIndicator.textContent = letter + ".";
+        optIndicator.textContent = letter;
         
         const optTextEl = document.createElement('div');
         optTextEl.className = "option-text";
@@ -1086,8 +1103,8 @@ function initializeQuizUI() {
       }
     });
     
-    // Toggle layout padding (no longer need extra padding at bottom)
-    document.getElementById('quiz-main-layout').classList.remove('scroll-mode-padding');
+    // Toggle layout padding (scroll mode needs padding so bottom content isn't blocked by the sticky footer)
+    document.getElementById('quiz-main-layout').classList.add('scroll-mode-padding');
     
     if (el.scrollStickyFooter) el.scrollStickyFooter.style.display = 'flex';
     
@@ -1110,6 +1127,10 @@ function initializeQuizUI() {
         <div class="question-header">
           <span class="question-number-badge" id="question-index-badge"></span>
           <h3 class="question-text" id="question-content-text"></h3>
+        </div>
+        <div class="question-image-container" id="paged-image-container" style="display: none;">
+          <img id="question-image" class="question-media" src="" alt="Question Image">
+          <div class="image-loader-spinner"><div class="loading-spinner"></div></div>
         </div>
         <div class="options-container" id="quiz-options-wrapper"></div>
         <div class="question-actions">
@@ -1183,13 +1204,45 @@ function renderQuestionPaged() {
   el.questionIndexBadge.textContent = `Q${state.currentQuestionIndex + 1}`;
   el.questionContent.textContent = currentQuestion.question_text;
   
-  const imgElement = document.getElementById("question-image");
-  if (imgElement) {
+  const imgContainer = document.getElementById("paged-image-container");
+  if (imgContainer) {
     if (currentQuestion.image_url) {
-      imgElement.src = currentQuestion.image_url;
-      imgElement.style.display = "block";
+      imgContainer.style.display = "flex";
+      imgContainer.classList.add("loading");
+      
+      // Re-create the img element to prevent any browser event queuing/caching race conditions
+      imgContainer.innerHTML = `
+        <img id="question-image" class="question-media" src="${currentQuestion.image_url}" alt="Question Image" style="display: none;">
+        <div class="image-loader-spinner"><div class="loading-spinner"></div></div>
+      `;
+      
+      const newImg = document.getElementById("question-image");
+      if (newImg) {
+        newImg.onload = () => {
+          newImg.style.display = "block";
+          imgContainer.classList.remove("loading");
+          newImg.onload = null;
+          newImg.onerror = null;
+        };
+        
+        newImg.onerror = () => {
+          imgContainer.classList.remove("loading");
+          imgContainer.style.display = "none";
+          newImg.onload = null;
+          newImg.onerror = null;
+        };
+        
+        // Handle cached images immediately
+        if (newImg.complete && newImg.naturalWidth > 0) {
+          newImg.style.display = "block";
+          imgContainer.classList.remove("loading");
+          newImg.onload = null;
+          newImg.onerror = null;
+        }
+      }
     } else {
-      imgElement.style.display = "none";
+      imgContainer.style.display = "none";
+      imgContainer.innerHTML = "";
     }
   }
   
@@ -1228,7 +1281,7 @@ function renderQuestionPaged() {
     
     const optIndicator = document.createElement('div');
     optIndicator.className = "option-indicator";
-    optIndicator.textContent = letter + ".";
+    optIndicator.textContent = letter;
     
     const optTextEl = document.createElement('div');
     optTextEl.className = "option-text";
@@ -1732,7 +1785,39 @@ async function restoreSavedSession() {
         return;
       }
       
-      state.questions = questions || [];
+      let restoredQuestions = questions || [];
+      
+      // Re-order the questions array to match the randomized order that was saved
+      if (saved.questionIdsOrder && Array.isArray(saved.questionIdsOrder)) {
+        const qMap = {};
+        restoredQuestions.forEach(q => {
+          qMap[q.id] = q;
+        });
+        const reordered = [];
+        saved.questionIdsOrder.forEach(id => {
+          if (qMap[id]) {
+            reordered.push(qMap[id]);
+          }
+        });
+        // Append any items not matching the saved list (fallback/failsafe)
+        restoredQuestions.forEach(q => {
+          if (!saved.questionIdsOrder.includes(q.id)) {
+            reordered.push(q);
+          }
+        });
+        restoredQuestions = reordered;
+      }
+      
+      // Restore dynamic option shuffle maps
+      if (saved.shuffledIndicesMap) {
+        restoredQuestions.forEach(q => {
+          if (saved.shuffledIndicesMap[q.id]) {
+            q._shuffledIndices = saved.shuffledIndicesMap[q.id];
+          }
+        });
+      }
+      
+      state.questions = restoredQuestions;
       
       // Update UI summary
       el.summaryName.textContent = state.name;

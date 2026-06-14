@@ -184,8 +184,10 @@
                 <h3 class="question-text" id="question-content-text">Loading question text...</h3>
               </div>
 
-              <img id="question-image" class="question-media" src="" alt="Question Image" style="display: none;"
-                loading="lazy">
+              <div class="question-image-container" id="paged-image-container" style="display: none;">
+                <img id="question-image" class="question-media" src="" alt="Question Image">
+                <div class="image-loader-spinner"><div class="loading-spinner"></div></div>
+              </div>
 
               <div class="options-container" id="quiz-options-wrapper">
                 <!-- Shuffled options dynamically generated -->
