@@ -30,6 +30,35 @@ const customStorageAdapter = {
   }
 };
 
+// Local Storage Safe Wrappers for Host Pins
+function getSavedPins() {
+  try {
+    const data = localStorage.getItem('chronos_host_pins');
+    if (!data) return [];
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn("Storage restricted or JSON parsing failed for host pins. Falling back to empty array.", e);
+    return [];
+  }
+}
+
+function savePins(pins) {
+  try {
+    localStorage.setItem('chronos_host_pins', JSON.stringify(pins));
+  } catch (e) {
+    console.warn("Failed to save host pins to local storage.", e);
+  }
+}
+
+function removeSavedPin(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.warn(`Failed to remove key ${key} from local storage.`, e);
+  }
+}
+
 let supabaseClient = null;
 let currentCandidateTokenToKill = null;
 const candidateLastSeen = {};
@@ -500,11 +529,11 @@ el.formGenerateSession.addEventListener('submit', async (e) => {
     el.liveSessionPin.value = accessPin;
 
     // Save to multi-pin recovery
-    let savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+    let savedPins = getSavedPins();
     if (!savedPins.includes(accessPin)) {
       savedPins.push(accessPin);
       if (savedPins.length > 5) savedPins.shift(); // Keep last 5
-      localStorage.setItem('chronos_host_pins', JSON.stringify(savedPins));
+      savePins(savedPins);
     }
     renderRecentPins();
 
@@ -615,7 +644,7 @@ el.btnHaltExam.addEventListener('click', async () => {
 el.btnPublishResults.addEventListener('click', async () => {
   if (await showCustomConfirm("PUBLISH RESULTS? This will reveal the final leaderboard to all candidates.")) {
     updateSessionStatus('completed');
-    localStorage.removeItem('chronos_host_pin');
+    removeSavedPin('chronos_host_pin');
   }
 });
 
@@ -1518,7 +1547,7 @@ function initializeAdminUI() {
 
       // Recover Host Codes
       renderRecentPins();
-      const savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+      const savedPins = getSavedPins();
       if (savedPins.length > 0 && el.liveSessionPin && !el.liveSessionPin.value) {
         const mostRecentPin = savedPins[savedPins.length - 1];
         el.liveSessionPin.value = mostRecentPin;
@@ -1531,11 +1560,11 @@ function initializeAdminUI() {
     el.liveSessionPin.addEventListener('change', (e) => {
       const pin = e.target.value.trim();
       if (pin.length === 6) {
-        let savedPins = JSON.parse(localStorage.getItem('chronos_host_pins') || "[]");
+        let savedPins = getSavedPins();
         if (!savedPins.includes(pin)) {
           savedPins.push(pin);
           if (savedPins.length > 5) savedPins.shift();
-          localStorage.setItem('chronos_host_pins', JSON.stringify(savedPins));
+          savePins(savedPins);
           renderRecentPins();
         }
         syncTelemetrySubscription(pin, "live-telemetry-grid");
@@ -1607,7 +1636,7 @@ function initializeAdminUI() {
     btnLogout.addEventListener("click", async () => {
       try {
         await supabaseClient.auth.signOut();
-        localStorage.removeItem('chronos_host_pin');
+        removeSavedPin('chronos_host_pin');
 
         // Hide secure dashboard wrapper
         const secureWrapper = document.getElementById('secure-dashboard-wrapper');

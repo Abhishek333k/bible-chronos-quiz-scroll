@@ -171,6 +171,7 @@ let state = {
   isDisqualified: false,
   isCheatModalOpen: false,
   isAntiCheatEnabled: true,
+  lastViolationTime: 0,
 
   // Navigation / Views State
   currentView: "view-auth",
@@ -345,7 +346,34 @@ async function renderBooklet() {
   if (!container) return;
   container.innerHTML = '';
 
-  await loadQuestionsIfNeeded();
+  // Fetch questions containing grading columns (safe now because the exam is submitted)
+  const { data: fullQuestions, error: qError } = await supabaseClient
+    .from("questions")
+    .select("id, quiz_id, question_text, options, image_url, sort_order, created_at, correct_index, correct_option")
+    .eq("quiz_id", state.quizId);
+    
+  if (qError || !fullQuestions) {
+    container.textContent = "Error loading booklet questions.";
+    return;
+  }
+
+  // Align fullQuestions with presentation order of state.questions
+  const qMap = {};
+  fullQuestions.forEach(q => {
+    qMap[q.id] = q;
+  });
+  
+  const displayQuestions = [];
+  state.questions.forEach(sq => {
+    if (qMap[sq.id]) {
+      displayQuestions.push(qMap[sq.id]);
+    }
+  });
+
+  // Fallback in case state.questions was lost/empty
+  if (displayQuestions.length === 0) {
+    displayQuestions.push(...fullQuestions);
+  }
   
   // Forcibly hydrate states straight from the certified database ledger 
   // This shields the UI against browser refreshes or local state purges
@@ -360,7 +388,7 @@ async function renderBooklet() {
     return;
   }
 
-  state.questions.forEach((q, idx) => {
+  displayQuestions.forEach((q, idx) => {
     const historicalRow = serverRecords.find(r => r.question_id === q.id);
     const originalOptions = Array.isArray(q.options) ? q.options : JSON.parse(q.options || "[]");
     
@@ -518,6 +546,10 @@ el.authForm.addEventListener("submit", async (e) => {
 
     if (tokenError || !tokenRecord) {
       throw new Error("Invalid or unrecognized token.");
+    }
+
+    if (tokenRecord.is_void) {
+      throw new Error("This token has been terminated by the administrator.");
     }
     
     const sessionRecord = tokenRecord.quiz_sessions;
@@ -743,10 +775,10 @@ el.btnEnterFullscreen.addEventListener("click", async () => {
 // ----------------------------------------------------
 async function loadAndInitializeQuiz() {
   try {
-    // Fetch all questions for this quiz
+    // Fetch all questions for this quiz (answers/correct_index strictly excluded from client payload)
     const { data: questions, error } = await supabaseClient
       .from("questions")
-      .select("*")
+      .select("id, quiz_id, question_text, options, image_url, sort_order, created_at")
       .eq("quiz_id", state.quizId)
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
@@ -1439,6 +1471,13 @@ function handleViolation(reason) {
   // Also ignore if Anti-Cheat is disabled for this session
   if (!state.isAntiCheatEnabled || state.currentView !== "view-quiz" || state.isDisqualified) return;
 
+  const now = Date.now();
+  if (now - state.lastViolationTime < 1500) {
+    console.log(`Violation ignored (debounced <1500ms). Reason: ${reason}`);
+    return;
+  }
+  state.lastViolationTime = now;
+
   state.violationCount++;
   console.warn(`Anti-Cheat Triggered. Reason: ${reason}. Violation count: ${state.violationCount}`);
 
@@ -1537,47 +1576,33 @@ async function submitQuiz(isForcedCheater = false) {
   }
 
   try {
-    const responsesToInsert = state.questions.map(q => {
+    const responsesPayload = state.questions.map(q => {
       const selectedVal = state.userAnswers[q.id];
       const selectedIndex = getSelectedOptionIndex(q, selectedVal);
       const selectedText = getSelectedOptionText(q, selectedVal);
-      const correctChoiceIndex = getCorrectOptionIndex(q);
-      const correctChoiceText = getCorrectOptionText(q);
       
-      // If cheater and did not answer this question yet, or if they tabbed out completely
       let selectedOptionToSave = (selectedIndex !== -1) ? selectedIndex.toString() : (selectedText || "NO_RESPONSE");
-      let isCorrectValue = false;
-
-      if (isForcedCheater) {
-        // Flag remaining answers with a special DQ string
-        if (selectedVal === undefined) {
-          selectedOptionToSave = "AUTO_SUBMIT_DQ";
-        }
-        isCorrectValue = false;
-      } else {
-        if (correctChoiceIndex !== -1) {
-          isCorrectValue = (selectedIndex === correctChoiceIndex);
-        } else if (correctChoiceText) {
-          isCorrectValue = (selectedText && selectedText.trim().toLowerCase() === correctChoiceText.trim().toLowerCase());
-        }
+      if (isForcedCheater && selectedVal === undefined) {
+        selectedOptionToSave = "AUTO_SUBMIT_DQ";
       }
 
       return {
-        session_id: state.sessionId,
         question_id: q.id,
-        selected_option: selectedOptionToSave,
-        is_correct: isCorrectValue,
-        participant_name: state.name,
-        participant_email: state.email || null,
-        participant_guest_id: state.guestId,
-        time_taken_ms: state.totalTimeMs
+        selected_option: selectedOptionToSave
       };
     });
 
-    // Write all responses in one bulk insert operation to the database ledger
-    const { error } = await supabaseClient
-      .from("user_responses")
-      .insert(responsesToInsert);
+    // Write all responses and compute grading securely on the database server side via RPC
+    const { data: rpcData, error } = await supabaseClient.rpc('submit_and_grade_responses', {
+      p_session_id: state.sessionId,
+      p_participant_name: state.name,
+      p_participant_email: state.email || null,
+      p_participant_guest_id: state.guestId,
+      p_time_taken_ms: state.totalTimeMs,
+      p_is_disqualified: isForcedCheater,
+      p_access_token: state.accessToken,
+      p_responses: responsesPayload
+    });
 
     if (error) {
       throw error;
@@ -1788,6 +1813,24 @@ async function restoreSavedSession() {
   if (recoveryData) {
     try {
       const saved = JSON.parse(recoveryData);
+      
+      // Enforce the Guillotine: Check if token is voided before recovering
+      const token = saved.accessToken || sessionStorage.getItem("accessToken");
+      if (token) {
+        const { data: tokenRecord, error: tokenError } = await supabaseClient
+          .from('session_tokens')
+          .select('is_void')
+          .eq('access_token', token)
+          .single();
+          
+        if (tokenError || (tokenRecord && tokenRecord.is_void)) {
+          console.warn("Guillotine: Access token is voided or invalid. Terminating session...");
+          sessionStorage.clear();
+          window.location.reload();
+          return;
+        }
+      }
+
       // Restore state
       state.userAnswers = saved.userAnswers || {};
       state.reviewFlags = saved.reviewFlags || {};
@@ -1803,10 +1846,10 @@ async function restoreSavedSession() {
       state.displayMode = saved.displayMode || 'paged';
       state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
 
-      // Re-fetch questions since they were stripped from storage
+      // Re-fetch questions since they were stripped from storage (answers/correct_index strictly excluded from client payload)
       const { data: questions, error } = await supabaseClient
         .from("questions")
-        .select("*")
+        .select("id, quiz_id, question_text, options, image_url, sort_order, created_at")
         .eq("quiz_id", state.quizId)
         .order("sort_order", { ascending: true });
         
