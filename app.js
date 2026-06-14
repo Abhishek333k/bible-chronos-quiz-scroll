@@ -392,6 +392,36 @@ async function renderBooklet() {
     title.textContent = `Q${idx + 1}. ${q.question_text}`;
     block.appendChild(title);
 
+    // Dynamic Image Loading for Booklet View
+    if (q.image_url) {
+      const imgContainer = document.createElement('div');
+      imgContainer.className = 'question-image-container loading';
+      imgContainer.style.marginBottom = '1rem';
+      
+      const imgEl = document.createElement('img');
+      imgEl.className = 'question-media';
+      imgEl.alt = 'Question Image';
+      imgEl.style.display = 'none';
+      
+      imgEl.onload = () => {
+        imgEl.style.display = 'block';
+        imgContainer.classList.remove('loading');
+      };
+      imgEl.onerror = () => {
+        imgContainer.classList.remove('loading');
+        imgContainer.style.display = 'none';
+      };
+      imgEl.src = q.image_url;
+      
+      const spinner = document.createElement('div');
+      spinner.className = 'image-loader-spinner';
+      spinner.innerHTML = '<div class="loading-spinner"></div>';
+      
+      imgContainer.appendChild(imgEl);
+      imgContainer.appendChild(spinner);
+      block.appendChild(imgContainer);
+    }
+
     const box = document.createElement('div');
     box.className = 'booklet-answers scale-text';
     box.innerHTML = isMarkedCorrect ? 
