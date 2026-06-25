@@ -583,6 +583,8 @@ el.authForm.addEventListener("submit", async (e) => {
     state.isJumbled = sessionRecord.is_jumbled === false ? false : true;
     state.displayMode = sessionRecord.display_mode || 'paged';
     state.isAntiCheatEnabled = false; // TEMPORARILY DISABLED FOR TESTING
+    state.draftState = tokenRecord.draft_state;
+    state.sessionStartedAt = sessionRecord.started_at;
     
     sessionStorage.setItem("guest_id", state.guestId);
     sessionStorage.setItem("participantName", name);
@@ -666,6 +668,9 @@ function subscribeToSession() {
         let effectiveStatus = payload.new.status;
         if (effectiveStatus === 'in_progress' && payload.new.completed_at) {
           effectiveStatus = 'evaluation';
+        }
+        if (payload.new.started_at) {
+          state.sessionStartedAt = payload.new.started_at;
         }
         evaluateSessionStatus(effectiveStatus);
       }
@@ -800,11 +805,26 @@ async function loadAndInitializeQuiz() {
     state.violationCount = 0;
     state.isDisqualified = false;
 
+    // Hydrate from Draft State
+    if (state.draftState) {
+       console.log("Hydrating from server draft state...");
+       state.userAnswers = state.draftState.userAnswers || {};
+       state.reviewFlags = state.draftState.reviewFlags || {};
+       if (state.draftState.currentQuestionIndex) {
+         state.currentQuestionIndex = state.draftState.currentQuestionIndex;
+       }
+    }
+
     // Transition to the Quiz View
     showView("view-quiz");
 
-    // Initialize & Start Speedrun Timer
-    startTimer();
+    // Initialize & Start Speedrun Timer (Continuous server time)
+    if (state.sessionStartedAt) {
+      const elapsedMs = Date.now() - new Date(state.sessionStartedAt).getTime();
+      startTimer(elapsedMs > 0 ? elapsedMs : 0);
+    } else {
+      startTimer(0);
+    }
 
     // Render first question layout
     initializeQuizUI();
@@ -825,6 +845,29 @@ function updateFooterCounter() {
   }
 }
 
+let draftSaveTimeout = null;
+
+function saveSessionDraftToSupabase(safeState) {
+  if (draftSaveTimeout) clearTimeout(draftSaveTimeout);
+  draftSaveTimeout = setTimeout(async () => {
+    try {
+      if (!state.accessToken || !navigator.onLine) return;
+      const minimalDraft = {
+        userAnswers: safeState.userAnswers,
+        reviewFlags: safeState.reviewFlags,
+        currentQuestionIndex: safeState.currentQuestionIndex,
+        savedTimeMs: safeState.savedTimeMs
+      };
+      await supabaseClient.rpc('save_session_draft', {
+        p_access_token: state.accessToken,
+        p_draft_state: minimalDraft
+      });
+    } catch (e) {
+      console.warn("Failed to sync draft to server", e);
+    }
+  }, 1500); // debounce 1.5s
+}
+
 function saveDisasterRecovery() {
   try {
     const safeState = { ...state };
@@ -843,6 +886,7 @@ function saveDisasterRecovery() {
     
     safeState.savedTimeMs = state.isTimerRunning ? Math.round(performance.now() - state.startTime) : state.totalTimeMs;
     sessionStorage.setItem("inProgressQuiz", JSON.stringify(safeState));
+    saveSessionDraftToSupabase(safeState);
   } catch (e) {
     console.warn("Storage restricted");
   }
@@ -885,7 +929,8 @@ function sendTelemetry() {
         flagged: Object.keys(state.reviewFlags).length,
         currentScore: currentScore,
         violationCount: state.violationCount,
-        isDisqualified: state.isDisqualified
+        isDisqualified: state.isDisqualified,
+        userAnswers: state.userAnswers
       }
     });
   }
@@ -1492,14 +1537,42 @@ function handleViolation(reason) {
   }
 }
 
+let graceTimerInterval = null;
+
 function openCheatModal() {
   state.isCheatModalOpen = true;
   el.modalViolationCount.textContent = state.violationCount;
+  
+  const graceContainer = document.getElementById("grace-timer-container");
+  const graceCountdown = document.getElementById("grace-countdown");
+  
+  if (graceContainer && graceCountdown) {
+    graceContainer.style.display = "block";
+    let secondsLeft = 10;
+    graceCountdown.textContent = secondsLeft;
+    
+    if (graceTimerInterval) clearInterval(graceTimerInterval);
+    graceTimerInterval = setInterval(() => {
+      secondsLeft--;
+      graceCountdown.textContent = secondsLeft;
+      if (secondsLeft <= 0) {
+        clearInterval(graceTimerInterval);
+        state.isDisqualified = true;
+        closeCheatModal();
+        submitQuiz(true); // Auto submit because grace period expired
+      }
+    }, 1000);
+  }
+  
   el.cheatModal.classList.add("active");
 }
 
 function closeCheatModal() {
   state.isCheatModalOpen = false;
+  if (graceTimerInterval) {
+    clearInterval(graceTimerInterval);
+    graceTimerInterval = null;
+  }
   el.cheatModal.classList.remove("active");
 }
 
@@ -1575,22 +1648,26 @@ async function submitQuiz(isForcedCheater = false) {
     showToast("⚠️ SECURITY EXCLUSION: Exam submitted automatically due to tabbing/cheat violations.");
   }
 
-  try {
-    const responsesPayload = state.questions.map(q => {
-      const selectedVal = state.userAnswers[q.id];
-      const selectedIndex = getSelectedOptionIndex(q, selectedVal);
-      const selectedText = getSelectedOptionText(q, selectedVal);
-      
-      let selectedOptionToSave = (selectedIndex !== -1) ? selectedIndex.toString() : (selectedText || "NO_RESPONSE");
-      if (isForcedCheater && selectedVal === undefined) {
-        selectedOptionToSave = "AUTO_SUBMIT_DQ";
-      }
+  const responsesPayload = state.questions.map(q => {
+    const selectedVal = state.userAnswers[q.id];
+    const selectedIndex = getSelectedOptionIndex(q, selectedVal);
+    const selectedText = getSelectedOptionText(q, selectedVal);
+    
+    let selectedOptionToSave = (selectedIndex !== -1) ? selectedIndex.toString() : (selectedText || "NO_RESPONSE");
+    if (isForcedCheater && selectedVal === undefined) {
+      selectedOptionToSave = "AUTO_SUBMIT_DQ";
+    }
 
-      return {
-        question_id: q.id,
-        selected_option: selectedOptionToSave
-      };
-    });
+    return {
+      question_id: q.id,
+      selected_option: selectedOptionToSave
+    };
+  });
+
+  const performSubmission = async () => {
+    if (!navigator.onLine) {
+      throw new Error("Offline");
+    }
 
     // Write all responses and compute grading securely on the database server side via RPC
     const { data: rpcData, error } = await supabaseClient.rpc('submit_and_grade_responses', {
@@ -1604,20 +1681,80 @@ async function submitQuiz(isForcedCheater = false) {
       p_responses: responsesPayload
     });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
+    return rpcData;
+  };
 
+  try {
+    await performSubmission();
     sessionStorage.removeItem("inProgressQuiz");
     showToast("Exam results successfully certified on the scroll ledger.");
-
   } catch (err) {
-    console.error("Submission error:", err);
-    showToast("Ledger insertion failed. Please contact your host. Details: " + err.message);
+    console.warn("Submission error:", err);
+    if (err.message === "Offline" || err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      const pendingData = {
+        sessionId: state.sessionId,
+        name: state.name,
+        email: state.email,
+        guestId: state.guestId,
+        totalTimeMs: state.totalTimeMs,
+        isForcedCheater,
+        accessToken: state.accessToken,
+        responsesPayload
+      };
+      localStorage.setItem("pending_submission_" + state.sessionId, JSON.stringify(pendingData));
+      
+      const spinnerContainer = document.querySelector("#view-lock .spinner-container");
+      if (spinnerContainer) {
+        spinnerContainer.innerHTML = `
+          <div style="color: var(--color-danger); font-size: 2rem; margin-bottom: 1rem;">📡</div>
+          <p class="spinner-text" style="color: var(--color-danger); font-weight: bold;">Connection Lost</p>
+          <p style="font-size: 0.9rem;">Your submission is queued locally. <strong>DO NOT close this window.</strong> It will auto-submit when the connection returns.</p>
+        `;
+      }
+      showToast("You are offline. Submission queued. Do not close tab.");
+    } else {
+      showToast("Ledger insertion failed. Details: " + err.message);
+    }
   } finally {
     state.isSubmitting = false;
   }
 }
+
+// Global online listener to push pending submissions
+window.addEventListener("online", async () => {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith("pending_submission_")) {
+      try {
+        showToast("Connection restored. Pushing pending submission...");
+        const data = JSON.parse(localStorage.getItem(key));
+        
+        const { error } = await supabaseClient.rpc('submit_and_grade_responses', {
+          p_session_id: data.sessionId,
+          p_participant_name: data.name,
+          p_participant_email: data.email || null,
+          p_participant_guest_id: data.guestId,
+          p_time_taken_ms: data.totalTimeMs,
+          p_is_disqualified: data.isForcedCheater,
+          p_access_token: data.accessToken,
+          p_responses: data.responsesPayload
+        });
+        
+        if (!error) {
+          localStorage.removeItem(key);
+          showToast("Pending submission certified on ledger.");
+          const spinnerContainer = document.querySelector("#view-lock .spinner-container");
+          if (spinnerContainer) {
+            spinnerContainer.innerHTML = `<div class="loading-spinner"></div><p class="spinner-text">Awaiting proctor to release results...</p>`;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to push pending submission", e);
+      }
+    }
+  }
+});
 
 async function fetchSessionResponses(sessionId) {
   let responses = [];
@@ -1976,3 +2113,25 @@ function updateTextScale(modifier) {
 if (el.btnTextDecrease) el.btnTextDecrease.addEventListener('click', () => updateTextScale(-0.1));
 if (el.btnTextReset) el.btnTextReset.addEventListener('click', () => updateTextScale(0));
 if (el.btnTextIncrease) el.btnTextIncrease.addEventListener('click', () => updateTextScale(0.1));
+
+// ----------------------------------------------------
+// 22. Image Zoom Functionality
+// ----------------------------------------------------
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('question-media')) {
+    const zoomModal = document.getElementById('image-zoom-modal');
+    const zoomedImg = document.getElementById('zoomed-image');
+    if (zoomModal && zoomedImg) {
+      zoomedImg.src = e.target.src;
+      zoomModal.style.display = 'flex';
+      zoomModal.classList.remove('hidden');
+    }
+  }
+});
+
+const zoomModal = document.getElementById('image-zoom-modal');
+if (zoomModal) {
+  zoomModal.addEventListener('click', () => {
+    zoomModal.style.display = 'none';
+  });
+}

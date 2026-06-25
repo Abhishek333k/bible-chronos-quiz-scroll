@@ -321,6 +321,14 @@
 
   </div>
 
+  <!-- Image Zoom Modal -->
+  <div id="image-zoom-modal" class="modal-overlay hidden" style="display: none; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.9); padding: 1rem; cursor: zoom-out;">
+    <div style="position: relative; max-width: 100%; max-height: 100%; text-align: center;">
+      <button id="btn-close-zoom" style="position: absolute; top: -40px; right: 0; background: transparent; border: none; color: var(--color-gold); font-size: 2rem; cursor: pointer;">✕</button>
+      <img id="zoomed-image" src="" style="max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: 8px; box-shadow: 0 0 30px rgba(255, 215, 0, 0.15);">
+    </div>
+  </div>
+
   <!-- Custom Cheat Alert Modal -->
   <div id="cheat-modal" class="modal-overlay">
     <div class="modal-content glassmorphism">
@@ -333,6 +341,9 @@
         Tabbing out to check external Bible references or exiting fullscreen is prohibited. On the second violation,
         your exam will be automatically submitted immediately.
       </p>
+      <div id="grace-timer-container" style="margin-top: 1.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; font-weight: bold; color: var(--color-danger); display: none;">
+        Grace Period: <span id="grace-countdown">10</span> seconds remaining
+      </div>
       <button id="btn-resume-quiz" class="btn-primary">Return to Exam & Re-Enter Fullscreen</button>
     </div>
   </div>

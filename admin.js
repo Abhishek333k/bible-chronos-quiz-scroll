@@ -1276,6 +1276,7 @@ function startLiveMonitor() {
 // 11. Live Telemetry Subscription
 // ----------------------------------------------------
 let currentTelemetryChannel = null;
+let currentLiveQuestionsLookup = {};
 
 async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
   if (currentTelemetryChannel) {
@@ -1299,7 +1300,7 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
   try {
     const { data: session, error } = await supabaseClient
       .from('quiz_sessions')
-      .select('id, status')
+      .select('id, status, quiz_id')
       .eq('access_pin', pin)
       .single();
 
@@ -1334,6 +1335,14 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
       }
     }
 
+    if (session.quiz_id) {
+      const { data: qData } = await supabaseClient.from('questions').select('id, correct_index, correct_option, options').eq('quiz_id', session.quiz_id);
+      currentLiveQuestionsLookup = {};
+      if (qData) {
+        qData.forEach(q => currentLiveQuestionsLookup[q.id] = q);
+      }
+    }
+
     // strictly clamp the Admin UI buttons to the database state
     syncAdminPanelButtons(session.status);
 
@@ -1347,6 +1356,58 @@ async function syncTelemetrySubscription(pin, gridId = "live-telemetry-grid") {
           console.log("Telemetry event received:", payload);
           if (payload && payload.payload) {
             candidateLastSeen[payload.payload.guestId] = Date.now();
+            
+            if (payload.payload.userAnswers && currentLiveQuestionsLookup) {
+               let liveScore = 0;
+               Object.keys(payload.payload.userAnswers).forEach(qId => {
+                 const selectedVal = payload.payload.userAnswers[qId];
+                 const q = currentLiveQuestionsLookup[qId];
+                 if (q) {
+                    let isCorrect = false;
+                    const correctIdx = q.correct_index;
+                    
+                    if (correctIdx !== null && correctIdx !== undefined && parseInt(correctIdx, 10) >= 0) {
+                      const cIdxInt = parseInt(correctIdx, 10);
+                      if (String(selectedVal).match(/^\d+$/) && parseInt(selectedVal, 10) === cIdxInt) {
+                        isCorrect = true;
+                      } else if (q.options && Array.isArray(q.options) && q.options[cIdxInt]) {
+                        if (String(q.options[cIdxInt]).toLowerCase().trim() === String(selectedVal).toLowerCase().trim()) {
+                          isCorrect = true;
+                        }
+                      } else if (typeof q.options === 'string') {
+                         try {
+                           const parsed = JSON.parse(q.options);
+                           if (parsed[cIdxInt] && String(parsed[cIdxInt]).toLowerCase().trim() === String(selectedVal).toLowerCase().trim()) {
+                              isCorrect = true;
+                           }
+                         } catch(e) {}
+                      }
+                    } else if (q.correct_option) {
+                      let selectedText = String(selectedVal);
+                      if (String(selectedVal).match(/^\d+$/)) {
+                         const sIdx = parseInt(selectedVal, 10);
+                         if (q.options && Array.isArray(q.options)) {
+                            selectedText = String(q.options[sIdx] || selectedVal);
+                         } else if (typeof q.options === 'string') {
+                            try {
+                               const parsed = JSON.parse(q.options);
+                               selectedText = String(parsed[sIdx] || selectedVal);
+                            } catch(e) {}
+                         }
+                      }
+                      if (String(q.correct_option).toLowerCase().trim() === selectedText.toLowerCase().trim()) {
+                        isCorrect = true;
+                      }
+                    }
+                    if (isCorrect) liveScore++;
+                 }
+               });
+               payload.payload.currentScore = liveScore;
+            } else if (!payload.payload.userAnswers) {
+               console.warn("Client did not send userAnswers payload. Candidate window likely needs a hard refresh.");
+               showToast("Candidate telemetry sync error: User answers missing. Candidate should refresh their page.");
+            }
+
             updateTelemetryCard(payload.payload, gridId);
           }
         }
